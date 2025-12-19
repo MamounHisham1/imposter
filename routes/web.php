@@ -1,35 +1,34 @@
 <?php
 
+use App\Http\Controllers\SseController;
+use App\Livewire\CreateRoom;
+use App\Livewire\GameRoom;
+use App\Livewire\JoinRoom;
 use App\Livewire\Settings\Appearance;
 use App\Livewire\Settings\Password;
 use App\Livewire\Settings\Profile;
 use App\Livewire\Settings\TwoFactor;
+use App\Models\Room;
 use Illuminate\Support\Facades\Route;
-use Laravel\Fortify\Features;
 
-Route::get('/', function () {
-    return view('welcome');
-})->name('home');
+// Game Routes
+Route::get('/', CreateRoom::class)->name('home');
+Route::get('/create-room', CreateRoom::class)->name('create-room');
+Route::get('/join-room', JoinRoom::class)->name('join-room');
+Route::get('/join-room/{code}', JoinRoom::class)->name('join-room-with-code');
+Route::get('/room/{room:code}', GameRoom::class)->name('game-room');
 
-Route::view('dashboard', 'dashboard')
-    ->middleware(['auth', 'verified'])
-    ->name('dashboard');
+// SSE Route
+Route::get('/sse/room/{room:code}', [SseController::class, 'stream'])->name('sse.stream');
 
-Route::middleware(['auth'])->group(function () {
-    Route::redirect('settings', 'settings/profile');
+// PWA Install Route
+Route::view('/install', 'install')->name('install');
 
-    Route::get('settings/profile', Profile::class)->name('profile.edit');
-    Route::get('settings/password', Password::class)->name('user-password.edit');
-    Route::get('settings/appearance', Appearance::class)->name('appearance.edit');
-
-    Route::get('settings/two-factor', TwoFactor::class)
-        ->middleware(
-            when(
-                Features::canManageTwoFactorAuthentication()
-                    && Features::optionEnabled(Features::twoFactorAuthentication(), 'confirmPassword'),
-                ['password.confirm'],
-                [],
-            ),
-        )
-        ->name('two-factor.show');
+// Settings Routes
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/settings/profile', Profile::class)->name('profile.edit');
+    Route::get('/settings/password', Password::class)->name('user-password.edit');
+    Route::get('/settings/appearance', Appearance::class)->name('appearance.edit');
+    Route::get('/settings/two-factor', TwoFactor::class)->name('two-factor.show');
 });
+
