@@ -185,6 +185,17 @@ select:focus[data-flux-control] {
     }
 }
 
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Utility Classes */
 .animate-pulse-gold {
     animation: pulse-gold 300ms ease-out;
@@ -196,6 +207,11 @@ select:focus[data-flux-control] {
 
 .animate-slide-up-fade {
     animation: slide-up-fade 200ms ease-out;
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+    opacity: 0;
 }
 
 /* Brand Gradient */
@@ -227,6 +243,28 @@ select:focus[data-flux-control] {
     animation: pulse-gold 300ms ease-out;
 }
 
-/* \[:where(&)\]:size-4 {
-    @apply size-4;
-} */
+/* Custom Scrollbar Styles */
+.scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+    background: rgba(30, 58, 138, 0.2);
+    border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(29, 78, 216, 0.5);
+    border-radius: 10px;
+    transition: background 0.2s;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(29, 78, 216, 0.8);
+}
+
+/* Firefox scrollbar */
+.scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(29, 78, 216, 0.5) rgba(30, 58, 138, 0.2);
+}

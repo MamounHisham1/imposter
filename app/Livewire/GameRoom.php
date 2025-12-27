@@ -41,6 +41,7 @@ class GameRoom extends Component
         'vote-cast-event' => 'handleVoteCast',
         'round-finished' => 'handleRoundFinished',
         'message-sent' => 'handleMessageSent',
+        'auto-transition-discussion' => '$refresh',
     ];
 
     public function mount(Room $room)
@@ -62,6 +63,9 @@ class GameRoom extends Component
 
     public function render()
     {
+        // Refresh room from database to get latest state
+        $this->room->refresh();
+
         // Eager load all relationships to avoid N+1 queries
         $this->room->load([
             'players',
@@ -70,6 +74,17 @@ class GameRoom extends Component
             'votes.targetPlayer',
             'messages.player',
         ]);
+
+        // Reload messages on every render to get latest from database
+        if ($this->room->status === 'discussion') {
+            $this->loadMessages();
+        }
+
+        // Sync gameStatus from database if on results page
+        if ($this->room->status === 'results' && $this->room->game_status) {
+            $this->gameStatus = $this->room->game_status;
+            $this->winner = $this->room->winner;
+        }
 
         return view('livewire.game-room', [
             'players' => $this->room->players,
@@ -151,10 +166,45 @@ class GameRoom extends Component
     public function startNextTurn()
     {
         try {
+            // Double check game isn't already finished
+            if ($this->gameStatus === 'finished') {
+                \Log::warning('startNextTurn called but game is already finished!');
+
+                return;
+            }
+
             app(GameService::class)->startNextTurn($this->room, $this->player);
             $this->resetResults();
         } catch (\Exception $e) {
+            \Log::error('startNextTurn failed', ['error' => $e->getMessage()]);
             $this->addError('game', $e->getMessage());
+        }
+    }
+
+    public function transitionToDiscussion()
+    {
+        try {
+            app(GameService::class)->transitionToDiscussion($this->room);
+        } catch (\Exception $e) {
+            \Log::error('Failed to transition to discussion', ['error' => $e->getMessage()]);
+        }
+    }
+
+    public function updateDiscussionTime($seconds)
+    {
+        try {
+            app(GameService::class)->updateDiscussionTime($this->room, $this->player, (int) $seconds);
+        } catch (\Exception $e) {
+            $this->addError('discussionTime', $e->getMessage());
+        }
+    }
+
+    public function transitionToVoting()
+    {
+        try {
+            app(GameService::class)->transitionToVoting($this->room);
+        } catch (\Exception $e) {
+            \Log::error('Failed to transition to voting', ['error' => $e->getMessage()]);
         }
     }
 
@@ -205,10 +255,25 @@ class GameRoom extends Component
     public function handleRoundFinished($event = null)
     {
         $this->room->refresh();
+
+        \Log::info('Livewire handleRoundFinished called', [
+            'event' => $event,
+            'event_game_status' => $event['game_status'] ?? 'unknown',
+            'room_game_status' => $this->room->game_status,
+            'event_winner' => $event['winner'] ?? 'unknown',
+            'room_winner' => $this->room->winner,
+        ]);
+
         // Store results data for display
         $this->roundResults = $event;
-        $this->gameStatus = $event['game_status'] ?? 'ongoing';
-        $this->winner = $event['winner'] ?? null;
+        // Use room's game_status as source of truth (synced from DB)
+        $this->gameStatus = $this->room->game_status ?? ($event['game_status'] ?? 'ongoing');
+        $this->winner = $this->room->winner ?? ($event['winner'] ?? null);
+
+        \Log::info('Livewire state after handleRoundFinished', [
+            'gameStatus' => $this->gameStatus,
+            'winner' => $this->winner,
+        ]);
 
         $this->dispatch('round-finished', $event);
     }
@@ -234,8 +299,16 @@ class GameRoom extends Component
 
     public function handleMessageSent($event = null)
     {
+        \Log::info('handleMessageSent called', ['event' => $event]);
+
         if ($event) {
-            $this->messages[] = $event;
+            // Force array re-assignment to trigger Livewire reactivity
+            $messages = $this->messages;
+            $messages[] = $event;
+            $this->messages = $messages;
+
+            \Log::info('Message added to array', ['count' => count($this->messages)]);
+
             $this->dispatch('message-sent-event', $event);
         }
     }

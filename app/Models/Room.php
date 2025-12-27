@@ -11,6 +11,8 @@ class Room extends Model
     protected $fillable = [
         'code',
         'status',
+        'game_status',
+        'winner',
         'current_word',
         'category',
         'creator_id',
@@ -20,6 +22,7 @@ class Room extends Model
 
     protected $casts = [
         'is_imposter' => 'boolean',
+        'phase_started_at' => 'datetime',
     ];
 
     public function creator()
@@ -90,6 +93,9 @@ class Room extends Model
 
         $phaseDuration = 0;
         switch ($this->status) {
+            case 'reveal_word':
+                $phaseDuration = 10; // 10 seconds to see and memorize the word
+                break;
             case 'discussion':
                 $phaseDuration = $this->discussion_time;
                 break;
@@ -98,8 +104,9 @@ class Room extends Model
                 return null;
         }
 
-        $elapsed = now()->diffInSeconds($this->phase_started_at);
-        $remaining = $phaseDuration - $elapsed;
+        // Calculate elapsed seconds (must be positive)
+        $elapsed = $this->phase_started_at->diffInSeconds(now());
+        $remaining = $phaseDuration - (int) $elapsed;
 
         return max(0, $remaining);
     }

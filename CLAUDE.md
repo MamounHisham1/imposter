@@ -10,6 +10,7 @@ This is a **Laravel 12 Livewire Starter Kit** application with the following sta
 - **Flux UI Free Edition** component library
 - **Tailwind CSS 4** (CSS-first configuration)
 - **Laravel Fortify** for authentication
+- **Laravel Reverb** for real-time WebSocket communication
 - **SQLite** database (default)
 - **Vite** for frontend bundling
 
@@ -20,7 +21,7 @@ This is a **Laravel 12 Livewire Starter Kit** application with the following sta
 # Initial setup (first time)
 composer run setup
 
-# Development server (runs PHP server, queue, logs, and Vite concurrently)
+# Development server (runs PHP server, queue, logs, Vite, and Reverb concurrently)
 composer run dev
 
 # Alternative: Run Vite dev server only
@@ -71,6 +72,20 @@ php artisan migrate:rollback
 # Refresh database (rollback & migrate)
 php artisan migrate:refresh
 ```
+
+### WebSocket Server (Laravel Reverb)
+```bash
+# Start Reverb server (standalone)
+php artisan reverb:start
+
+# Start with debug mode
+php artisan reverb:start --debug
+
+# Run on custom host/port
+php artisan reverb:start --host=0.0.0.0 --port=8080
+```
+
+**Note:** When running `composer run dev`, the Reverb server starts automatically alongside other services.
 
 ## Architecture & Structure
 
@@ -209,10 +224,11 @@ The Laravel Boost guidelines are specifically curated by Laravel maintainers for
 ## Foundational Context
 This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
 
-- php - 8.4.15
+- php - 8.3.28
 - laravel/fortify (FORTIFY) - v1
 - laravel/framework (LARAVEL) - v12
 - laravel/prompts (PROMPTS) - v0
+- laravel/reverb (REVERB) - v1
 - livewire/flux (FLUXUI_FREE) - v2
 - livewire/livewire (LIVEWIRE) - v3
 - laravel/mcp (MCP) - v0

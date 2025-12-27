@@ -94,8 +94,11 @@ class GameService
 
             // Update room
             $room->update([
-                'status' => 'hints',
+                'status' => 'reveal_word',
                 'current_word' => $word,
+                'phase_started_at' => now(),
+                'game_status' => 'ongoing',
+                'winner' => null,
             ]);
 
             // Clear previous hints and votes
@@ -104,7 +107,7 @@ class GameService
 
             // Broadcast game started
             $this->broadcastEvent($room, 'phase_changed', [
-                'phase' => 'hints',
+                'phase' => 'reveal_word',
                 'word' => $word,
                 // Note: imposter_id is NOT broadcasted for security reasons
                 // Each player checks their own is_imposter status locally
@@ -119,10 +122,26 @@ class GameService
             throw new \Exception('فقط منشئ الغرفة يمكنه بدء الجولة التالية');
         }
 
+        // Check if there are enough alive players to continue
+        $aliveCount = $room->players()->where('status', 'alive')->count();
+        if ($aliveCount < 3) {
+            throw new \Exception('لا يمكن المتابعة - عدد اللاعبين الأحياء أقل من 3');
+        }
+
+        // Check if game is already finished (imposter was caught)
+        // This shouldn't happen if UI is correct, but safety check
+        $imposter = $room->players()->where('is_imposter', true)->first();
+        if ($imposter && $imposter->status === 'eliminated') {
+            throw new \Exception('اللعبة انتهت - تم القبض على المخادع!');
+        }
+
         DB::transaction(function () use ($room) {
             // Update room status
             $room->update([
-                'status' => 'hints',
+                'status' => 'reveal_word',
+                'phase_started_at' => now(),
+                'game_status' => 'ongoing',
+                'winner' => null,
             ]);
 
             // Clear hints and votes for the new turn
@@ -131,8 +150,57 @@ class GameService
 
             // Broadcast phase change
             $this->broadcastEvent($room, 'phase_changed', [
-                'phase' => 'hints',
+                'phase' => 'reveal_word',
                 'word' => $room->current_word,
+            ]);
+        });
+    }
+
+    public function transitionToDiscussion(Room $room): void
+    {
+        DB::transaction(function () use ($room) {
+            $room->update([
+                'status' => 'discussion',
+                'phase_started_at' => now(),
+            ]);
+
+            // Clear messages from previous discussion
+            $room->messages()->delete();
+
+            // Broadcast phase change
+            $this->broadcastEvent($room, 'phase_changed', [
+                'phase' => 'discussion',
+                'discussion_time' => $room->discussion_time,
+            ]);
+        });
+    }
+
+    public function updateDiscussionTime(Room $room, Player $player, int $seconds): void
+    {
+        // Check if the player is the room creator
+        if ($room->creator_id !== $player->id) {
+            throw new \Exception('فقط منشئ الغرفة يمكنه تغيير وقت النقاش');
+        }
+
+        if ($seconds < 10 || $seconds > 300) {
+            throw new \Exception('يجب أن يكون وقت النقاش بين 10 ثوانٍ و 5 دقائق');
+        }
+
+        // Just update the discussion time, don't reset the timer
+        $room->update(['discussion_time' => $seconds]);
+    }
+
+    public function transitionToVoting(Room $room): void
+    {
+        DB::transaction(function () use ($room) {
+            $room->update([
+                'status' => 'voting',
+                'phase_started_at' => now(),
+            ]);
+
+            // Broadcast phase change
+            $this->broadcastEvent($room, 'phase_changed', [
+                'phase' => 'voting',
             ]);
         });
     }
@@ -297,7 +365,12 @@ class GameService
     private function calculateResults(Room $room): void
     {
         DB::transaction(function () use ($room) {
-            $room->update(['status' => 'results']);
+            // Initialize as ongoing, will update if game ends
+            $room->update([
+                'status' => 'results',
+                'game_status' => 'ongoing',
+                'winner' => null,
+            ]);
 
             $imposter = $room->players()->where('is_imposter', true)->first();
             $votes = $room->votes()->with('targetPlayer')->get();
@@ -336,32 +409,68 @@ class GameService
                 $eliminatedPlayer = Player::find($candidates[0]);
                 if ($eliminatedPlayer) {
                     $eliminatedPlayer->update(['status' => 'eliminated']);
+
+                    \Log::info('Player eliminated', [
+                        'player_id' => $eliminatedPlayer->id,
+                        'player_name' => $eliminatedPlayer->name,
+                        'is_imposter' => $eliminatedPlayer->is_imposter,
+                    ]);
                 }
             }
 
             // Win Conditions
             if ($eliminatedPlayer) {
                 if ($eliminatedPlayer->is_imposter) {
-                    // Imposter caught!
+                    // Imposter caught - GAME ENDS, CREWMATES WIN!
                     $gameStatus = 'finished';
                     $winner = 'crewmates';
+
+                    \Log::info('Game finished - Imposter caught!', [
+                        'imposter_id' => $eliminatedPlayer->id,
+                        'imposter_name' => $eliminatedPlayer->name,
+                    ]);
                 } else {
                     // Innocent kicked. Check remaining.
                     $aliveCount = $room->players()->where('status', 'alive')->count();
-                    // If 1 imposter and 1 crewmate left (total 2) -> Imposter wins.
-                    // User said: "if the players ara two then the imposter wins"
+
+                    \Log::info('Innocent player eliminated', [
+                        'eliminated_player' => $eliminatedPlayer->name,
+                        'alive_count_after' => $aliveCount,
+                    ]);
+
+                    // If 2 or fewer players remain -> Imposter wins (not enough to catch them)
                     if ($aliveCount <= 2) {
                         $gameStatus = 'finished';
                         $winner = 'imposter';
+
+                        \Log::info('Game finished - Not enough players remain, imposter wins!');
                     }
-                    // If >2 players remain, game continues to next discussion phase
-                    // We'll handle this after results broadcast
+                    // If 3+ players remain, game continues to next round
                 }
             } else {
-                // No one eliminated (tie). Game continues to next discussion phase
-                $gameStatus = 'ongoing';
-                // We'll handle continuation after results broadcast
+                // No one eliminated (tie). Game continues if enough players
+                $aliveCount = $room->players()->where('status', 'alive')->count();
+                if ($aliveCount < 3) {
+                    // Edge case: not enough players even without elimination
+                    $gameStatus = 'finished';
+                    $winner = 'imposter';
+                    \Log::info('Game finished - Not enough players for tie vote');
+                } else {
+                    $gameStatus = 'ongoing';
+                }
             }
+
+            // Update room with final game status
+            $room->update([
+                'game_status' => $gameStatus,
+                'winner' => $winner,
+            ]);
+
+            \Log::info('Room updated with game status', [
+                'room_id' => $room->id,
+                'game_status' => $gameStatus,
+                'winner' => $winner,
+            ]);
 
             // Prepare results data
             $results = [
@@ -445,7 +554,17 @@ class GameService
 
     private function broadcastEvent(Room $room, string $event, array $data): void
     {
-        \App\Http\Controllers\SseController::broadcast($room, $event, $data);
+        $eventClass = match ($event) {
+            'player_joined' => \App\Events\PlayerJoined::class,
+            'phase_changed' => \App\Events\PhaseChanged::class,
+            'hint_submitted' => \App\Events\HintSubmitted::class,
+            'vote_cast' => \App\Events\VoteCast::class,
+            'round_finished' => \App\Events\RoundFinished::class,
+            'message_sent' => \App\Events\MessageSent::class,
+            default => throw new \InvalidArgumentException("Unknown event: {$event}"),
+        };
+
+        broadcast(new $eventClass($room, $data));
 
         \Log::info("Broadcasting event: {$event}", [
             'room_id' => $room->id,

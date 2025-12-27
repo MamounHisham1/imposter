@@ -1,75 +1,48 @@
-<div dir="rtl" x-data="{
+<div
+    dir="rtl"
+    @if($room->status === 'discussion' && $timeRemaining !== null && $timeRemaining > 0)
+        wire:poll.1s
+    @endif
+    x-data="{
     init() {
-        // Initialize SSE connection with reconnection logic
-        let eventSource = null;
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 10;
-        const reconnectDelay = 3000; // 3 seconds
+        const roomCode = '{{ $room->code }}';
+        console.log('Subscribing to room channel:', `room.${roomCode}`);
 
-        const connectSSE = () => {
-            if (eventSource) {
-                eventSource.close();
-            }
+        // Subscribe to room channel
+        const channel = window.Echo.channel(`room.${roomCode}`);
 
-            eventSource = new EventSource('{{ route('sse.stream', ['room' => $room->code]) }}');
-
-            eventSource.addEventListener('player_joined', (e) => {
-                const data = JSON.parse(e.data);
-                Livewire.dispatch('player-joined', data);
+        channel
+            .listen('.player.joined', (e) => {
+                console.log('Received player.joined event:', e);
+                Livewire.dispatch('player-joined', e);
+            })
+            .listen('.phase.changed', (e) => {
+                console.log('Received phase.changed event:', e);
+                Livewire.dispatch('phase-changed', e);
+            })
+            .listen('.hint.submitted', (e) => {
+                console.log('Received hint.submitted event:', e);
+                Livewire.dispatch('hint-submitted-event', e);
+            })
+            .listen('.vote.cast', (e) => {
+                console.log('Received vote.cast event:', e);
+                Livewire.dispatch('vote-cast-event', e);
+            })
+            .listen('.round.finished', (e) => {
+                console.log('Received round.finished event:', e);
+                Livewire.dispatch('round-finished', e);
+            })
+            .listen('.message.sent', (e) => {
+                console.log('Received message.sent event:', e);
+                Livewire.dispatch('message-sent', e);
             });
 
-            eventSource.addEventListener('phase_changed', (e) => {
-                const data = JSON.parse(e.data);
-                Livewire.dispatch('phase-changed', data);
-            });
-
-            eventSource.addEventListener('hint_submitted', (e) => {
-                const data = JSON.parse(e.data);
-                Livewire.dispatch('hint-submitted-event', data);
-            });
-
-            eventSource.addEventListener('vote_cast', (e) => {
-                const data = JSON.parse(e.data);
-                Livewire.dispatch('vote-cast-event', data);
-            });
-
-            eventSource.addEventListener('round_finished', (e) => {
-                const data = JSON.parse(e.data);
-                Livewire.dispatch('round-finished', data);
-            });
-
-            eventSource.addEventListener('message_sent', (e) => {
-                const data = JSON.parse(e.data);
-                Livewire.dispatch('message-sent', data);
-            });
-
-            // Handle connection errors and reconnection
-            eventSource.onerror = (e) => {
-                console.log('SSE connection error, attempting reconnection...');
-                eventSource.close();
-
-                if (reconnectAttempts < maxReconnectAttempts) {
-                    reconnectAttempts++;
-                    setTimeout(connectSSE, reconnectDelay);
-                } else {
-                    console.error('Max reconnection attempts reached');
-                }
-            };
-
-            // Reset reconnect attempts on successful connection
-            eventSource.onopen = () => {
-                reconnectAttempts = 0;
-            };
-        };
-
-        // Initial connection
-        connectSSE();
+        console.log('Subscribed to channel:', channel);
 
         // Cleanup on component unmount
         this.$wire.on('destroy', () => {
-            if (eventSource) {
-                eventSource.close();
-            }
+            console.log('Leaving channel:', `room.${roomCode}`);
+            window.Echo.leave(`room.${roomCode}`);
         });
     }
 }"
@@ -167,12 +140,44 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                     </div>
 
                     @if($room->status === 'waiting' && $room->canStartGame() && $player && $room->creator_id === $player->id)
+                        <!-- Discussion Time Setting -->
+                        <div class="mb-6" x-data="{ time: {{ $room->discussion_time }} }">
+                            <label class="block text-sm font-medium text-blue-200 mb-3">
+                                ⏱️ وقت النقاش (بالثواني)
+                            </label>
+                            <div class="flex items-center gap-3">
+                                <input
+                                    type="range"
+                                    x-model="time"
+                                    min="10"
+                                    max="180"
+                                    step="10"
+                                    class="flex-1 h-2 bg-blue-800/50 rounded-lg appearance-none cursor-pointer"
+                                    style="accent-color: #10b981;"
+                                />
+                                <div class="flex items-center gap-2 px-4 py-2 bg-blue-800/50 rounded-xl border border-blue-600/30 min-w-[80px] justify-center">
+                                    <span class="text-white font-bold text-lg" x-text="time"></span>
+                                    <span class="text-blue-300 text-sm">ث</span>
+                                </div>
+                            </div>
+                            <div class="mt-2 flex justify-between text-xs text-blue-400">
+                                <span>10 ثانية</span>
+                                <span>3 دقائق</span>
+                            </div>
+                            <button
+                                @click="$wire.call('updateDiscussionTime', time)"
+                                class="mt-3 w-full px-4 py-2 bg-blue-700/50 hover:bg-blue-600/50 rounded-lg text-blue-200 text-sm transition-colors"
+                            >
+                                حفظ الوقت
+                            </button>
+                        </div>
+
                         <button
                             wire:click="startGame"
                             class="relative overflow-hidden group bg-gradient-to-r from-emerald-500 to-green-600
                                    hover:from-emerald-600 hover:to-green-700 text-white font-bold py-4 px-8
                                    rounded-2xl transition-all duration-300 transform hover:scale-105 active:scale-95
-                                   shadow-lg hover:shadow-xl"
+                                   shadow-lg hover:shadow-xl w-full"
                         >
                             <span class="relative z-10 text-lg">بدء اللعبة</span>
                             <div class="absolute inset-0 h-full w-full transform scale-0 group-hover:scale-100
@@ -180,7 +185,7 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                                       from-emerald-600 to-green-700 -z-1"></div>
                         </button>
                     @elseif($room->status === 'waiting' && $room->canStartGame() && $player && $room->creator_id !== $player->id)
-                        <div class="text-sm text-blue-300">
+                        <div class="text-sm text-blue-300 text-center py-4">
                             ⏳ انتظر منشئ الغرفة لبدء اللعبة
                         </div>
                     @endif
@@ -293,65 +298,135 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
 
             <!-- Main Game Area -->
             <div class="lg:col-span-2 space-y-8">
-                @if($room->status === 'hints')
-                    <!-- Hint Submission -->
-                    <div class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-blue-700/30">
-                        <h3 class="text-2xl font-bold text-blue-100 mb-6">التلميح الخاص بك</h3>
+                @if($room->status === 'reveal_word')
+                    <!-- Word Reveal Phase -->
+                    <div
+                        class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-12 shadow-2xl border border-blue-700/30"
+                        wire:poll.1s
+                        x-data="{
+                            serverTimeRemaining: {{ $timeRemaining ?? 10 }},
+                            hasTransitioned: false,
+                            checkTransition() {
+                                if (this.serverTimeRemaining <= 0 && !this.hasTransitioned) {
+                                    this.hasTransitioned = true;
+                                    $wire.call('transitionToDiscussion');
+                                }
+                            }
+                        }"
+                        x-init="checkTransition()"
+                        x-effect="serverTimeRemaining = {{ $timeRemaining ?? 10 }}; checkTransition()"
+                    >
+                        <div class="text-center">
+                            <h3 class="text-3xl font-bold text-blue-100 mb-8">الكلمة</h3>
 
-                        @if($isEliminated)
-                             <div class="text-center py-10 text-blue-300">
-                                لقد تم إقصاؤك، لا يمكنك تقديم تلميحات.
-                            </div>
-                        @elseif($hasSubmittedHint)
-                            <div class="text-center py-10">
-                                <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-emerald-500 to-green-600 rounded-full mb-6 transform hover:scale-105 transition-all duration-300">
-                                    <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                    </svg>
+                            <!-- Word Display -->
+                            <div class="relative mb-8">
+                                <div class="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-green-500/20 rounded-3xl blur-2xl"></div>
+                                <div class="relative bg-gradient-to-br from-emerald-600 to-green-700 rounded-3xl p-12 shadow-2xl border-4 border-emerald-500/50">
+                                    <p class="text-6xl md:text-8xl font-black text-white tracking-wider animate-bounce-in">
+                                        {{ $wordToShow }}
+                                    </p>
                                 </div>
-                                <p class="text-blue-300 text-lg">لقد قدمت تلميحك! انتظر باقي اللاعبين.</p>
                             </div>
-                        @else
-                            <form wire:submit="submitHint">
-                                <div class="space-y-6">
-                                    <div>
-                                        <label class="block text-sm font-medium text-blue-200 mb-4">
-                                            اكتب تلميحًا واحدًا أو جملة قصيرة (3 كلمات كحد أقصى)
-                                        </label>
-                                        <textarea
-                                            wire:model="hintText"
-                                            rows="4"
-                                            class="w-full px-5 py-4 bg-blue-800/30 border border-blue-600/30 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-blue-400 transition-all duration-300"
-                                            placeholder="مثال: حيوان أليف"
-                                            required
-                                        ></textarea>
-                                        @error('hintText')
-                                            <p class="mt-2 text-sm text-red-400">{{ $message }}</p>
-                                        @enderror
-                                    </div>
 
-                                    <button
-                                        type="submit"
-                                        class="relative overflow-hidden group w-full bg-gradient-to-r from-emerald-500 to-green-600
-                                               hover:from-emerald-600 hover:to-green-700 text-white font-bold py-4 px-4
-                                               rounded-2xl transition-all duration-300 transform hover:scale-105 active:scale-95
-                                               shadow-lg hover:shadow-xl"
-                                    >
-                                        <span class="relative z-10 text-lg">إرسال التلميح</span>
-                                        <div class="absolute inset-0 h-full w-full transform scale-0 group-hover:scale-100
-                                                  transition-transform duration-300 ease-out bg-gradient-to-r
-                                                  from-emerald-600 to-green-700 -z-1"></div>
-                                    </button>
+                            <!-- Countdown Timer -->
+                            <div class="flex flex-col items-center gap-4 mb-6">
+                                <p class="text-xl text-blue-200">النقاش يبدأ خلال</p>
+                                <div class="flex items-center justify-center w-20 h-20 bg-blue-800/50 rounded-full border-4 border-blue-600/50">
+                                    <span class="text-4xl font-bold text-white">{{ max(0, $timeRemaining ?? 10) }}</span>
                                 </div>
-                            </form>
-                        @endif
+                            </div>
+
+                            <p class="text-blue-300 text-lg">
+                                احفظ الكلمة! سيبدأ النقاش قريبًا...
+                            </p>
+                        </div>
                     </div>
                 @endif
 
                 @if($room->status === 'discussion')
                     <!-- Discussion Chat -->
-                    <div class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-blue-700/30">
-                        <h3 class="text-2xl font-bold text-blue-100 mb-6">النقاش</h3>
+                    <div
+                        class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-blue-700/30"
+                        wire:poll.1s
+                        x-data="{
+                            serverTimeRemaining: {{ $timeRemaining ?? 0 }},
+                            hasTransitioned: false,
+                            checkTransition() {
+                                if (this.serverTimeRemaining <= 0 && !this.hasTransitioned) {
+                                    this.hasTransitioned = true;
+                                    $wire.call('transitionToVoting');
+                                }
+                            }
+                        }"
+                        x-init="checkTransition()"
+                        x-effect="serverTimeRemaining = {{ $timeRemaining ?? 0 }}; checkTransition()"
+                    >
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-2xl font-bold text-blue-100">💬 النقاش</h3>
+                            <div class="flex items-center gap-3">
+                                @if($room->creator_id === $player->id)
+                                    <!-- Discussion Time Controls (Creator Only) -->
+                                    <div x-data="{ editing: false, time: {{ $room->discussion_time }} }">
+                                        <div x-show="!editing" class="flex items-center gap-2">
+                                            @if($timeRemaining !== null && $timeRemaining > 0)
+                                                <div class="flex items-center gap-2 px-4 py-2 bg-blue-800/50 rounded-xl border border-blue-600/30">
+                                                    <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                    <span class="text-white font-bold">{{ $timeRemaining }}s</span>
+                                                </div>
+                                            @endif
+                                            <button
+                                                @click="editing = true"
+                                                class="px-3 py-2 bg-blue-700/50 hover:bg-blue-600/50 rounded-lg transition-colors"
+                                                title="تعديل الوقت"
+                                            >
+                                                <svg class="w-5 h-5 text-blue-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div x-show="editing" class="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                x-model="time"
+                                                min="10"
+                                                max="300"
+                                                step="10"
+                                                class="w-20 px-3 py-2 bg-blue-800/50 border border-blue-600/30 rounded-lg text-white text-center"
+                                            />
+                                            <span class="text-blue-200 text-sm">ثانية</span>
+                                            <button
+                                                @click="$wire.call('updateDiscussionTime', time); editing = false"
+                                                class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+                                            >
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                </svg>
+                                            </button>
+                                            <button
+                                                @click="editing = false; time = {{ $room->discussion_time }}"
+                                                class="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                                            >
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                @else
+                                    @if($timeRemaining !== null && $timeRemaining > 0)
+                                        <div class="flex items-center gap-2 px-4 py-2 bg-blue-800/50 rounded-xl border border-blue-600/30">
+                                            <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                            <span class="text-white font-bold">{{ $timeRemaining }}s</span>
+                                        </div>
+                                    @endif
+                                @endif
+                            </div>
+                        </div>
 
                         @if($isEliminated)
                             <div class="text-center py-10 text-blue-300">
@@ -365,64 +440,113 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                             <!-- Chat Messages -->
                             <div
                                 id="chat-messages"
-                                class="mb-8 h-96 overflow-y-auto bg-blue-900/30 rounded-2xl p-6 space-y-4 border border-blue-700/20"
+                                wire:poll.1s
+                                class="mb-6 h-[28rem] overflow-y-auto bg-gradient-to-b from-blue-900/40 to-blue-950/60 rounded-2xl p-6 space-y-4 border border-blue-700/30 shadow-inner scrollbar-thin scrollbar-thumb-blue-700 scrollbar-track-blue-900/20"
                                 x-data="{
-                                    scrollToBottom() {
+                                    messageCount: {{ count($messages) }},
+                                    scrollToBottom(smooth = true) {
                                         const container = this.$el;
-                                        container.scrollTop = container.scrollHeight;
+                                        container.scrollTo({
+                                            top: container.scrollHeight,
+                                            behavior: smooth ? 'smooth' : 'auto'
+                                        });
                                     }
                                 }"
-                                x-init="scrollToBottom()"
-                                x-on:message-sent-event.window="scrollToBottom()"
+                                x-init="
+                                    scrollToBottom(false);
+                                    $watch('messageCount', (value) => {
+                                        if (value !== {{ count($messages) }}) {
+                                            messageCount = {{ count($messages) }};
+                                            setTimeout(() => scrollToBottom(true), 100);
+                                        }
+                                    });
+                                "
+                                x-effect="
+                                    if ({{ count($messages) }} !== messageCount) {
+                                        messageCount = {{ count($messages) }};
+                                        scrollToBottom(true);
+                                    }
+                                "
                             >
-                                @forelse($messages as $message)
-                                    <div class="flex flex-col {{ $message['player_id'] === $player->id ? 'items-end' : 'items-start' }}">
-                                        <div class="flex items-center mb-2">
-                                            <span class="text-sm font-medium {{ $message['player_id'] === $player->id ? 'text-blue-200' : 'text-blue-300' }}">
+                                @forelse($messages as $index => $message)
+                                    <div
+                                        class="flex flex-col {{ $message['player_id'] === $player->id ? 'items-end' : 'items-start' }} animate-fade-in"
+                                        style="animation-delay: {{ $index * 0.05 }}s"
+                                    >
+                                        <div class="flex items-center gap-2 mb-1.5 {{ $message['player_id'] === $player->id ? 'flex-row-reverse' : '' }}">
+                                            <!-- Avatar -->
+                                            <div class="w-7 h-7 rounded-full {{ $message['player_id'] === $player->id ? 'bg-gradient-to-br from-emerald-500 to-green-600' : 'bg-gradient-to-br from-blue-600 to-blue-700' }} flex items-center justify-center shadow-md">
+                                                <span class="text-white text-xs font-bold">
+                                                    {{ mb_substr($message['player_name'], 0, 1) }}
+                                                </span>
+                                            </div>
+                                            <span class="text-sm font-semibold {{ $message['player_id'] === $player->id ? 'text-emerald-300' : 'text-blue-300' }}">
                                                 {{ $message['player_name'] }}
                                             </span>
-                                            <span class="text-xs text-blue-400 mx-3">
+                                            <span class="text-xs text-blue-500">
                                                 {{ \Carbon\Carbon::parse($message['timestamp'])->format('H:i') }}
                                             </span>
                                         </div>
-                                        <div class="max-w-xs md:max-w-md px-5 py-3 rounded-2xl {{ $message['player_id'] === $player->id ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white' : 'bg-gradient-to-br from-blue-800/40 to-blue-900/40 text-blue-100' }} border {{ $message['player_id'] === $player->id ? 'border-blue-600/30' : 'border-blue-700/20' }}">
-                                            <p class="text-sm">{{ $message['message'] }}</p>
+                                        <div class="max-w-xs md:max-w-md px-5 py-3 rounded-2xl shadow-lg {{ $message['player_id'] === $player->id ? 'bg-gradient-to-br from-emerald-600 to-green-700 text-white rounded-tr-sm' : 'bg-gradient-to-br from-blue-800/60 to-blue-900/60 text-blue-50 rounded-tl-sm backdrop-blur-sm' }} border {{ $message['player_id'] === $player->id ? 'border-emerald-600/50' : 'border-blue-700/40' }}">
+                                            <p class="text-base leading-relaxed break-words">{{ $message['message'] }}</p>
                                         </div>
                                     </div>
                                 @empty
-                                    <div class="text-center py-10 text-blue-300">
-                                        لا توجد رسائل بعد. ابدأ النقاش!
+                                    <div class="flex flex-col items-center justify-center h-full text-center py-10">
+                                        <div class="w-20 h-20 bg-blue-800/30 rounded-full flex items-center justify-center mb-4">
+                                            <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                            </svg>
+                                        </div>
+                                        <p class="text-blue-300 text-lg font-medium">لا توجد رسائل بعد</p>
+                                        <p class="text-blue-400 text-sm mt-2">ابدأ النقاش واكتشف المخادع!</p>
                                     </div>
                                 @endforelse
                             </div>
 
                             <!-- Chat Input -->
-                            <form wire:submit="submitMessage">
-                                <div class="flex gap-3">
-                                    <input
-                                        type="text"
-                                        wire:model="chatMessage"
-                                        class="flex-1 px-5 py-4 bg-blue-800/30 border border-blue-600/30 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-blue-400 transition-all duration-300"
-                                        placeholder="اكتب رسالتك هنا..."
-                                        required
-                                        @if($timeRemaining !== null && $timeRemaining <= 0) disabled @endif
-                                    />
+                            <form wire:submit="submitMessage" class="relative">
+                                <div class="flex gap-3 items-end">
+                                    <div class="flex-1">
+                                        <textarea
+                                            wire:model="chatMessage"
+                                            rows="1"
+                                            class="w-full px-5 py-4 bg-blue-800/40 border-2 border-blue-600/40 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-white placeholder-blue-400 transition-all duration-300 resize-none"
+                                            placeholder="اكتب رسالتك هنا..."
+                                            required
+                                            @if($timeRemaining !== null && $timeRemaining <= 0) disabled @endif
+                                            x-data="{
+                                                resize() {
+                                                    $el.style.height = 'auto';
+                                                    $el.style.height = $el.scrollHeight + 'px';
+                                                }
+                                            }"
+                                            x-init="resize()"
+                                            @input="resize()"
+                                            @keydown.enter.prevent="
+                                                if (!$event.shiftKey) {
+                                                    $el.form.requestSubmit();
+                                                }
+                                            "
+                                        ></textarea>
+                                    </div>
                                     <button
                                         type="submit"
-                                        class="relative overflow-hidden group bg-gradient-to-r from-emerald-500 to-green-600
-                                               hover:from-emerald-600 hover:to-green-700 text-white font-bold py-4 px-8
-                                               rounded-2xl transition-all duration-300 transform hover:scale-105 active:scale-95
-                                               shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                                        class="relative overflow-hidden group bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-4 px-6 rounded-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                                         @if($timeRemaining !== null && $timeRemaining <= 0) disabled @endif
                                     >
-                                        <span class="relative z-10 text-lg">إرسال</span>
-                                        <div class="absolute inset-0 h-full w-full transform scale-0 group-hover:scale-100
-                                                  transition-transform duration-300 ease-out bg-gradient-to-r
-                                                  from-emerald-600 to-green-700 -z-1"></div>
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                        </svg>
                                     </button>
                                 </div>
                                 @error('chatMessage')
-                                    <p class="mt-2 text-sm text-red-400">{{ $message }}</p>
+                                    <p class="mt-2 text-sm text-red-400 flex items-center gap-2">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        {{ $message }}
+                                    </p>
                                 @enderror
                             </form>
                         @endif
@@ -520,35 +644,116 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
 
                 @if($room->status === 'results')
                     <!-- Results -->
-                    <div class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-blue-700/30">
-                        <h3 class="text-2xl font-bold text-blue-100 mb-8">
-                            {{ $gameStatus === 'finished' ? 'النتائج النهائية' : 'نتائج التصويت' }}
-                        </h3>
+                    <div
+                        class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-blue-700/30"
+                        wire:poll.1s
+                        x-data="{
+                            countdown: 5,
+                            interval: null,
+                            gameStatus: '{{ $gameStatus ?? '' }}',
+                            init() {
+                                console.log('Results view initialized, gameStatus:', this.gameStatus);
+                                // Only auto-transition if game is ongoing
+                                if (this.gameStatus === 'ongoing') {
+                                    console.log('Starting auto-transition countdown');
+                                    this.interval = setInterval(() => {
+                                        this.countdown--;
+                                        console.log('Countdown:', this.countdown);
+                                        if (this.countdown <= 0) {
+                                            clearInterval(this.interval);
+                                            console.log('Calling startNextTurn');
+                                            $wire.call('startNextTurn');
+                                        }
+                                    }, 1000);
+                                } else {
+                                    console.log('Game is finished, no auto-transition');
+                                }
+                            },
+                            destroy() {
+                                if (this.interval) {
+                                    console.log('Clearing interval');
+                                    clearInterval(this.interval);
+                                }
+                            }
+                        }"
+                        x-init="init()"
+                        x-effect="
+                            // Watch for gameStatus changes
+                            if ('{{ $gameStatus ?? '' }}' !== gameStatus) {
+                                gameStatus = '{{ $gameStatus ?? '' }}';
+                                console.log('gameStatus changed to:', gameStatus);
+                                // Clear interval if game became finished
+                                if (gameStatus === 'finished' && interval) {
+                                    clearInterval(interval);
+                                    interval = null;
+                                }
+                            }
+                        "
+                    >
+                        <div class="flex items-center justify-between mb-8">
+                            <h3 class="text-2xl font-bold text-blue-100">
+                                {{ $gameStatus === 'finished' ? 'النتائج النهائية' : 'نتائج التصويت' }}
+                            </h3>
+                            @if($gameStatus === 'ongoing')
+                                <div class="flex items-center gap-2 px-4 py-2 bg-blue-800/50 rounded-xl border border-blue-600/30">
+                                    <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span class="text-white font-bold" x-text="countdown"></span>
+                                </div>
+                            @endif
+                        </div>
 
                         <div class="space-y-8">
-
-                            <!-- Eliminated Player Info -->
+                            <!-- Eliminated Player - Big Announcement -->
                             @if(isset($roundResults['eliminated_player']))
-                                <div class="bg-gradient-to-br from-red-900/80 to-red-800/80 backdrop-blur-lg rounded-3xl p-8 text-center border border-red-700/30">
-                                    <p class="text-xl text-red-100 mb-4">
-                                        تم إقصاء اللاعب: <span class="font-bold text-white">{{ $roundResults['eliminated_player']['name'] }}</span>
-                                    </p>
+                                <div class="relative overflow-hidden bg-gradient-to-br from-red-900/90 to-red-800/90 backdrop-blur-lg rounded-3xl p-12 text-center border-4 {{ $roundResults['eliminated_player']['is_imposter'] && $gameStatus === 'finished' ? 'border-emerald-500' : 'border-red-500' }} animate-bounce-in">
+                                    <div class="absolute inset-0 bg-gradient-to-r {{ $roundResults['eliminated_player']['is_imposter'] && $gameStatus === 'finished' ? 'from-emerald-500/10 to-green-500/10' : 'from-red-500/10 to-red-600/10' }} blur-2xl"></div>
 
-                                    @if($gameStatus === 'finished')
-                                        <p class="mt-4 text-2xl font-bold {{ $roundResults['eliminated_player']['is_imposter'] ? 'text-emerald-400' : 'text-red-400' }}">
-                                            {{ $roundResults['eliminated_player']['is_imposter'] ? 'كان هو المخادع!' : 'لم يكن المخادع.' }}
-                                        </p>
-                                    @else
-                                         <p class="mt-4 text-red-300 text-lg">
-                                            لم يكن هو المخادع. اللعبة مستمرة...
-                                        </p>
-                                    @endif
+                                    <div class="relative">
+                                        <p class="text-lg text-red-200 mb-4">تم إقصاء</p>
+
+                                        <!-- Kicked Player Avatar & Name -->
+                                        <div class="flex flex-col items-center gap-4 mb-6">
+                                            <div class="w-24 h-24 rounded-full bg-gradient-to-br from-red-700 to-red-900 flex items-center justify-center shadow-2xl border-4 border-red-500">
+                                                <span class="text-white text-4xl font-bold">
+                                                    {{ mb_substr($roundResults['eliminated_player']['name'], 0, 1) }}
+                                                </span>
+                                            </div>
+                                            <p class="text-4xl font-black text-white">
+                                                {{ $roundResults['eliminated_player']['name'] }}
+                                            </p>
+                                        </div>
+
+                                        @if($gameStatus === 'finished')
+                                            @if($roundResults['eliminated_player']['is_imposter'])
+                                                <div class="p-6 bg-gradient-to-r from-emerald-600/30 to-green-600/30 rounded-2xl border-2 border-emerald-500 mb-4">
+                                                    <p class="text-3xl font-bold text-emerald-300 mb-2">🎯 كان هو المخادع!</p>
+                                                    <p class="text-xl text-emerald-200">تم القبض عليه!</p>
+                                                </div>
+                                            @else
+                                                <div class="p-6 bg-gradient-to-r from-red-600/30 to-red-700/30 rounded-2xl border-2 border-red-500 mb-4">
+                                                    <p class="text-3xl font-bold text-red-300 mb-2">❌ لم يكن المخادع</p>
+                                                    <p class="text-xl text-red-200">تم إقصاء بريء!</p>
+                                                </div>
+                                            @endif
+                                        @else
+                                            <div class="p-6 bg-red-800/50 rounded-2xl border-2 border-red-600">
+                                                <p class="text-2xl font-bold text-red-200 mb-2">❌ لم يكن المخادع</p>
+                                                <p class="text-lg text-red-300">اللعبة مستمرة...</p>
+                                            </div>
+                                        @endif
+                                    </div>
                                 </div>
                             @elseif($gameStatus === 'ongoing')
-                                <div class="bg-gradient-to-br from-yellow-900/80 to-yellow-800/80 backdrop-blur-lg rounded-3xl p-8 text-center border border-yellow-700/30">
-                                    <p class="text-xl text-yellow-100">
-                                        لم يتم إقصاء أحد (تعادل في الأصوات).
-                                    </p>
+                                <div class="bg-gradient-to-br from-yellow-900/80 to-yellow-800/80 backdrop-blur-lg rounded-3xl p-12 text-center border border-yellow-700/30 animate-bounce-in">
+                                    <div class="w-20 h-20 bg-yellow-700/50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                        <svg class="w-10 h-10 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <p class="text-2xl font-bold text-yellow-100 mb-2">تعادل في الأصوات!</p>
+                                    <p class="text-lg text-yellow-200">لم يتم إقصاء أحد</p>
                                 </div>
                             @endif
 
@@ -556,26 +761,40 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                                 <!-- Secret Word Reveal -->
                                 <div class="bg-gradient-to-br from-blue-800/40 to-blue-900/40 rounded-3xl p-8 text-center border border-blue-700/20">
                                     <p class="text-sm text-blue-300 mb-4">الكلمة السرية كانت:</p>
-                                    <p class="text-3xl font-bold text-white">{{ $room->current_word }}</p>
+                                    <p class="text-4xl font-bold text-white">{{ $room->current_word }}</p>
                                 </div>
 
                                 <!-- Winner Announcement -->
-                                <div class="p-8 rounded-3xl text-center border {{ $winner === 'crewmates' ? 'bg-gradient-to-br from-emerald-900/80 to-green-800/80 border-emerald-700/30' : 'bg-gradient-to-br from-red-900/80 to-red-800/80 border-red-700/30' }}">
-                                    <h4 class="text-3xl font-bold {{ $winner === 'crewmates' ? 'text-emerald-200' : 'text-red-200' }}">
-                                        فاز {{ $winner === 'crewmates' ? 'المواطنون' : 'المخادع' }}!
-                                    </h4>
+                                <div class="relative overflow-hidden p-12 rounded-3xl text-center border-4 {{ $winner === 'crewmates' ? 'bg-gradient-to-br from-emerald-900/90 to-green-800/90 border-emerald-500' : 'bg-gradient-to-br from-red-900/90 to-red-800/90 border-red-500' }}">
+                                    <div class="absolute inset-0 {{ $winner === 'crewmates' ? 'bg-gradient-to-r from-emerald-500/20 to-green-500/20' : 'bg-gradient-to-r from-red-500/20 to-red-600/20' }} blur-3xl"></div>
+                                    <div class="relative">
+                                        <div class="text-6xl mb-4">{{ $winner === 'crewmates' ? '👥' : '🎭' }}</div>
+                                        <h4 class="text-5xl font-black {{ $winner === 'crewmates' ? 'text-emerald-200' : 'text-red-200' }} mb-2">
+                                            {{ $winner === 'crewmates' ? 'فاز المواطنون!' : 'فاز المخادع!' }}
+                                        </h4>
+                                        <p class="text-xl {{ $winner === 'crewmates' ? 'text-emerald-300' : 'text-red-300' }}">
+                                            {{ $winner === 'crewmates' ? 'تم القبض على المخادع' : 'لم يتم اكتشاف المخادع' }}
+                                        </p>
+                                    </div>
+                                </div>
+                            @else
+                                <!-- Auto-transition message -->
+                                <div class="bg-blue-800/30 rounded-2xl p-6 text-center border border-blue-600/30">
+                                    <p class="text-blue-200 text-lg">
+                                        الجولة التالية تبدأ تلقائياً خلال <span class="font-bold text-white" x-text="countdown"></span> ثوانٍ...
+                                    </p>
                                 </div>
                             @endif
 
                             <!-- Votes Summary -->
                             <div>
-                                <h4 class="font-medium text-blue-200 mb-6">تفاصيل التصويت:</h4>
-                                <div class="space-y-3">
+                                <h4 class="font-bold text-blue-100 mb-6 text-xl">📊 تفاصيل التصويت:</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     @foreach($votes as $vote)
-                                        <div class="flex items-center justify-between p-5 bg-gradient-to-br from-blue-800/40 to-blue-900/40 rounded-2xl border border-blue-700/20">
-                                            <span class="text-white font-medium">{{ $vote->voter->name }}</span>
-                                            <span class="text-blue-400 mx-4">→</span>
-                                            <span class="text-white font-medium">{{ $vote->targetPlayer->name }}</span>
+                                        <div class="flex items-center justify-between p-4 bg-gradient-to-br from-blue-800/40 to-blue-900/40 rounded-xl border border-blue-700/20">
+                                            <span class="text-white font-semibold">{{ $vote->voter->name }}</span>
+                                            <span class="text-blue-400 mx-3">→</span>
+                                            <span class="text-white font-semibold">{{ $vote->targetPlayer->name }}</span>
                                         </div>
                                     @endforeach
                                 </div>
@@ -587,11 +806,37 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
         </div>
     </main>
 
-    <!-- SSE Status -->
-    <div class="fixed bottom-6 left-6">
+    <!-- WebSocket Connection Status -->
+    <div class="fixed bottom-6 left-6" x-data="{ connected: false }" x-init="
+        setTimeout(() => {
+            if (window.Echo && window.Echo.connector && window.Echo.connector.pusher) {
+                const connection = window.Echo.connector.pusher.connection;
+
+                // Set initial state
+                connected = connection.state === 'connected';
+
+                // Listen for state changes
+                connection.bind('state_change', (states) => {
+                    console.log('Pusher state changed:', states);
+                    connected = states.current === 'connected';
+                });
+
+                connection.bind('error', (err) => {
+                    console.error('Pusher connection error:', err);
+                });
+
+                console.log('Initial Pusher state:', connection.state);
+            } else {
+                console.error('Echo not initialized properly');
+            }
+        }, 100);
+    ">
         <div class="flex items-center space-x-3 text-sm text-blue-300">
-            <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse shadow-lg"></div>
-            <span class="font-medium">متصل</span>
+            <div
+                class="w-3 h-3 rounded-full shadow-lg transition-all"
+                :class="connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'"
+            ></div>
+            <span class="font-medium" x-text="connected ? 'متصل' : 'غير متصل'"></span>
         </div>
     </div>
 </div>
