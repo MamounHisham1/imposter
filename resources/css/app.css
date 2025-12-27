@@ -7,12 +7,27 @@
 @source '../../vendor/livewire/flux/stubs/**/*.blade.php';
 
 @custom-variant dark (&:where(.dark, .dark *));
-
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    /* =========================
+       Fonts
+    ========================= */
+    --font-sans: 'Instrument Sans',
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        'Segoe UI',
+        sans-serif,
+        'Apple Color Emoji',
+        'Segoe UI Emoji',
+        'Segoe UI Symbol',
+        'Noto Color Emoji';
 
-    /* Primary Colors - Mystery & Deception Theme */
-    --color-primary-50: #eef2ff;
+    /* =========================
+       Primary Colors (Indigo)
+       Mystery / Core Brand
+    ========================= */
+    --color-primary-50:  #eef2ff;
     --color-primary-100: #e0e7ff;
     --color-primary-200: #c7d2fe;
     --color-primary-300: #a5b4fc;
@@ -22,10 +37,13 @@
     --color-primary-700: #4338ca;
     --color-primary-800: #3730a3;
     --color-primary-900: #312e81;
-    --color-primary-950: #1e1b4b; /* Deep Indigo Blue - Main Brand */
+    --color-primary-950: #1e1b4b; /* Brand Core */
 
-    /* Secondary Colors - Mystery Accent */
-    --color-secondary-50: #faf5ff;
+    /* =========================
+       Secondary Colors (Violet)
+       Suspicion / Voting
+    ========================= */
+    --color-secondary-50:  #faf5ff;
     --color-secondary-100: #f3e8ff;
     --color-secondary-200: #e9d5ff;
     --color-secondary-300: #d8b4fe;
@@ -37,67 +55,74 @@
     --color-secondary-900: #581c87;
     --color-secondary-950: #3b0764;
 
-    /* Accent Colors - Attention/Reveal */
-    --color-accent-50: #fffbeb;
+    /* =========================
+       Accent Colors (Gold)
+       Reveal / Winner / Timer
+    ========================= */
+    --color-accent-50:  #fffbeb;
     --color-accent-100: #fef3c7;
     --color-accent-200: #fde68a;
     --color-accent-300: #fcd34d;
     --color-accent-400: #fbbf24;
-    --color-accent-500: #f59e0b; /* Warm Gold - Main Accent */
+    --color-accent-500: #f59e0b; /* Main Accent */
     --color-accent-600: #d97706;
     --color-accent-700: #b45309;
     --color-accent-800: #92400e;
     --color-accent-900: #78350f;
     --color-accent-950: #451a03;
 
-    /* Neutral Colors */
-    --color-neutral-50: #f8fafc; /* Main Background */
+    /* =========================
+       Neutral Colors
+       Background / Text
+    ========================= */
+    --color-neutral-50:  #f8fafc;
     --color-neutral-100: #f1f5f9;
-    --color-neutral-200: #e2e8f0; /* Borders */
+    --color-neutral-200: #e2e8f0;
     --color-neutral-300: #cbd5e1;
     --color-neutral-400: #94a3b8;
-    --color-neutral-500: #64748b; /* Muted Text */
+    --color-neutral-500: #64748b;
     --color-neutral-600: #475569;
     --color-neutral-700: #334155;
     --color-neutral-800: #1e293b;
-    --color-neutral-900: #0f172a; /* Primary Text */
+    --color-neutral-900: #0f172a;
     --color-neutral-950: #020617;
 
-    /* State Colors */
-    --color-success-500: #22c55e; /* green-500 */
-    --color-warning-500: #f59e0b; /* amber-500 */
-    --color-error-500: #ef4444; /* red-500 */
-    --color-info-500: #3b82f6; /* blue-500 */
+    /* =========================
+       State Colors
+    ========================= */
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-error:   #ef4444;
+    --color-info:    #3b82f6;
 
-    /* Brand Gradient Colors */
-    --color-gradient-start: #1e1b4b; /* indigo-950 */
-    --color-gradient-end: #5b21b6; /* violet-700 */
+    /* =========================
+       Brand Gradient
+    ========================= */
+    --gradient-brand: linear-gradient(
+        135deg,
+        #1e1b4b 0%,
+        #5b21b6 100%
+    );
 
-    --color-accent: var(--color-primary-950);
-    --color-accent-content: var(--color-primary-950);
-    --color-accent-foreground: var(--color-white);
+    /* =========================
+       Semantic Tokens
+       (DO NOT hardcode colors in UI)
+    ========================= */
+    --color-bg: var(--color-neutral-50);
+    --color-surface: #ffffff;
+    --color-border: var(--color-neutral-200);
+
+    --color-text-primary: var(--color-neutral-900);
+    --color-text-muted: var(--color-neutral-500);
+
+    --color-brand: var(--color-primary-950);
+    --color-brand-foreground: #ffffff;
+
+    --color-accent-main: var(--color-accent-500);
+    --color-accent-foreground: #ffffff;
 }
+ll
 
-@layer theme {
-    .dark {
-        --color-accent: var(--color-primary-200);
-        --color-accent-content: var(--color-primary-200);
-        --color-accent-foreground: var(--color-primary-950);
-
-        /* Dark mode neutral adjustments */
-        --color-neutral-50: #0f172a;
-        --color-neutral-100: #1e293b;
-        --color-neutral-200: #334155;
-        --color-neutral-300: #475569;
-        --color-neutral-400: #64748b;
-        --color-neutral-500: #94a3b8;
-        --color-neutral-600: #cbd5e1;
-        --color-neutral-700: #e2e8f0;
-        --color-neutral-800: #f1f5f9;
-        --color-neutral-900: #f8fafc;
-        --color-neutral-950: #ffffff;
-    }
-}
 
 @layer base {
 

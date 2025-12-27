@@ -14,6 +14,8 @@ class Room extends Model
         'current_word',
         'category',
         'creator_id',
+        'discussion_time',
+        'phase_started_at',
     ];
 
     protected $casts = [
@@ -40,6 +42,11 @@ class Room extends Model
         return $this->hasManyThrough(Vote::class, Player::class, 'room_id', 'voter_id');
     }
 
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
+
     public function generateCode(): string
     {
         do {
@@ -61,17 +68,46 @@ class Room extends Model
 
     public function allPlayersSubmittedHints(): bool
     {
-        $playerCount = $this->players()->count();
+        $alivePlayerCount = $this->players()->where('status', 'alive')->count();
         $hintCount = $this->hints()->count();
 
-        return $playerCount > 0 && $hintCount === $playerCount;
+        return $alivePlayerCount > 0 && $hintCount === $alivePlayerCount;
     }
 
     public function allPlayersVoted(): bool
     {
-        $playerCount = $this->players()->count();
+        $alivePlayerCount = $this->players()->where('status', 'alive')->count();
         $voteCount = $this->votes()->count();
 
-        return $playerCount > 0 && $voteCount === $playerCount;
+        return $alivePlayerCount > 0 && $voteCount === $alivePlayerCount;
+    }
+
+    public function getTimeRemaining(): ?int
+    {
+        if (! $this->phase_started_at) {
+            return null;
+        }
+
+        $phaseDuration = 0;
+        switch ($this->status) {
+            case 'discussion':
+                $phaseDuration = $this->discussion_time;
+                break;
+                // Add other phases if they have time limits
+            default:
+                return null;
+        }
+
+        $elapsed = now()->diffInSeconds($this->phase_started_at);
+        $remaining = $phaseDuration - $elapsed;
+
+        return max(0, $remaining);
+    }
+
+    public function isPhaseTimeUp(): bool
+    {
+        $remaining = $this->getTimeRemaining();
+
+        return $remaining !== null && $remaining <= 0;
     }
 }

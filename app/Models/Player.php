@@ -13,6 +13,7 @@ class Player extends Model
         'room_id',
         'name',
         'is_imposter',
+        'status',
         'score',
         'session_id',
     ];
@@ -20,6 +21,16 @@ class Player extends Model
     protected $casts = [
         'is_imposter' => 'boolean',
     ];
+
+    public function isAlive(): bool
+    {
+        return $this->status === 'alive';
+    }
+
+    public function isEliminated(): bool
+    {
+        return $this->status === 'eliminated';
+    }
 
     public function room(): BelongsTo
     {
@@ -41,8 +52,17 @@ class Player extends Model
         return $this->hasOne(Vote::class, 'voter_id');
     }
 
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
+
     public function getWordToShow(Room $room): string
     {
+        if ($this->isEliminated()) {
+            return 'لقد تم إقصاؤك من اللعبة';
+        }
+
         if ($this->is_imposter) {
             return 'أنت المخادع، حاول ألا تنكشف';
         }
@@ -63,5 +83,25 @@ class Player extends Model
     public function getVoteCount(): int
     {
         return $this->votesReceived()->count();
+    }
+
+    public function canChat(Room $room): bool
+    {
+        // Eliminated players cannot chat (spectate only)
+        if ($this->isEliminated()) {
+            return false;
+        }
+
+        // Players can only chat during discussion phase
+        if ($room->status !== 'discussion') {
+            return false;
+        }
+
+        // Player must be alive
+        if (! $this->isAlive()) {
+            return false;
+        }
+
+        return true;
     }
 }
