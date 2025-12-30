@@ -2,17 +2,20 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
-use App\Services\GameService;
 use App\Services\AiWordGenerator;
+use App\Services\GameService;
 use Livewire\Attributes\Layout;
+use Livewire\Component;
 
 #[Layout('components.layouts.app')]
 class CreateRoom extends Component
 {
     public string $playerName = '';
+
     public string $category = 'شيء';
+
     public ?string $roomCode = null;
+
     public bool $creating = false;
 
     protected $rules = [
@@ -46,7 +49,7 @@ class CreateRoom extends Component
             $this->redirect(route('game-room', ['room' => $room->code]), navigate: true);
 
         } catch (\Exception $e) {
-            $this->addError('create', 'حدث خطأ أثناء إنشاء الغرفة: ' . $e->getMessage());
+            $this->addError('create', 'حدث خطأ أثناء إنشاء الغرفة: '.$e->getMessage());
             $this->creating = false;
         }
     }

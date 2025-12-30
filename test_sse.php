@@ -5,10 +5,9 @@ require __DIR__.'/vendor/autoload.php';
 $app = require_once __DIR__.'/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
-use App\Models\Room;
-use App\Models\Player;
-use App\Services\GameService;
 use App\Http\Controllers\SseController;
+use App\Models\Room;
+use App\Services\GameService;
 
 echo "=== Testing SSE (Server-Sent Events) ===\n\n";
 
@@ -67,12 +66,12 @@ SseController::broadcast($room, 'test_event', ['message' => 'Hello from SSE test
 
 // Check if event was stored in cache
 $events = cache()->get("sse_room_{$room->id}", []);
-echo "   Events in cache: " . count($events) . "\n";
+echo '   Events in cache: '.count($events)."\n";
 
 if (count($events) > 0) {
     $lastEvent = end($events);
     echo "   Last event type: {$lastEvent['event']}\n";
-    echo "   Last event data: " . json_encode($lastEvent['data']) . "\n";
+    echo '   Last event data: '.json_encode($lastEvent['data'])."\n";
     echo "   ✓ Event broadcasting works\n";
 } else {
     echo "   ✗ No events found in cache\n";
@@ -87,14 +86,14 @@ $room->refresh();
 
 // Check for phase_changed event
 $events = cache()->get("sse_room_{$room->id}", []);
-$phaseEvents = array_filter($events, function($event) {
+$phaseEvents = array_filter($events, function ($event) {
     return $event['event'] === 'phase_changed';
 });
 
-echo "   Phase changed events: " . count($phaseEvents) . "\n";
+echo '   Phase changed events: '.count($phaseEvents)."\n";
 if (count($phaseEvents) > 0) {
     $lastPhaseEvent = end($phaseEvents);
-    echo "   Event data: " . json_encode($lastPhaseEvent['data']) . "\n";
+    echo '   Event data: '.json_encode($lastPhaseEvent['data'])."\n";
     echo "   ✓ Game events are being broadcast\n";
 } else {
     echo "   ✗ No phase_changed events found\n";
@@ -105,14 +104,14 @@ echo "\n4. Testing hint submission event...\n";
 $gameService->submitHint($player1, 'حيوان أليف');
 
 $events = cache()->get("sse_room_{$room->id}", []);
-$hintEvents = array_filter($events, function($event) {
+$hintEvents = array_filter($events, function ($event) {
     return $event['event'] === 'hint_submitted';
 });
 
-echo "   Hint submitted events: " . count($hintEvents) . "\n";
+echo '   Hint submitted events: '.count($hintEvents)."\n";
 if (count($hintEvents) > 0) {
     $lastHintEvent = end($hintEvents);
-    echo "   Event data: " . json_encode($lastHintEvent['data']) . "\n";
+    echo '   Event data: '.json_encode($lastHintEvent['data'])."\n";
     echo "   ✓ Hint events are being broadcast\n";
 } else {
     echo "   ✗ No hint_submitted events found\n";
@@ -132,7 +131,7 @@ echo "   3. Receive events immediately when broadcast\n\n";
 
 // Check the GameRoom Livewire component for SSE integration
 echo "6. Checking Livewire component SSE integration...\n";
-$gameRoomFile = file_get_contents(__DIR__ . '/app/Livewire/GameRoom.php');
+$gameRoomFile = file_get_contents(__DIR__.'/app/Livewire/GameRoom.php');
 if (strpos($gameRoomFile, 'EventSource') !== false) {
     echo "   ✓ GameRoom component uses EventSource\n";
 } else {

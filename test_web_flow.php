@@ -5,8 +5,8 @@ require __DIR__.'/vendor/autoload.php';
 $app = require_once __DIR__.'/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
-use App\Models\Room;
 use App\Models\Player;
+use App\Models\Room;
 use App\Services\GameService;
 
 echo "=== Testing Web Interface Flow ===\n\n";
@@ -37,8 +37,8 @@ echo "\n";
 // Test 2: Test room creation via web (simulated)
 echo "2. Testing room creation simulation...\n";
 echo "   Room code: {$room->code}\n";
-echo "   Room URL: " . route('game-room', ['room' => $room->code]) . "\n";
-echo "   SSE URL: " . route('sse.stream', ['room' => $room->code]) . "\n";
+echo '   Room URL: '.route('game-room', ['room' => $room->code])."\n";
+echo '   SSE URL: '.route('sse.stream', ['room' => $room->code])."\n";
 
 // Check if room is accessible
 $roomUrl = route('game-room', ['room' => $room->code]);
@@ -71,7 +71,7 @@ echo "   Players joined via web simulation:\n";
 foreach ($room->players as $player) {
     echo "   - {$player->name} (Session: {$player->session_id})\n";
 }
-echo "   Total: " . $room->players()->count() . " players\n";
+echo '   Total: '.$room->players()->count()." players\n";
 echo "   ✓ Player joining works\n\n";
 
 // Test 4: Test game start via web
@@ -102,7 +102,7 @@ foreach ($hints as $playerId => $hint) {
     echo "   {$player->name} submitted: '{$hint}'\n";
 }
 
-echo "   All hints submitted: " . ($room->allPlayersSubmittedHints() ? 'Yes' : 'No') . "\n";
+echo '   All hints submitted: '.($room->allPlayersSubmittedHints() ? 'Yes' : 'No')."\n";
 echo "   Current phase: {$room->status}\n";
 echo "   ✓ Hint submission works\n\n";
 
@@ -120,7 +120,7 @@ if ($room->status === 'voting') {
     echo "   - {$player2->name} → {$player3->name}\n";
     echo "   - {$player3->name} → {$player1->name}\n";
 
-    echo "   All votes submitted: " . ($room->allPlayersVoted() ? 'Yes' : 'No') . "\n";
+    echo '   All votes submitted: '.($room->allPlayersVoted() ? 'Yes' : 'No')."\n";
     echo "   ✓ Voting works\n";
 } else {
     echo "   ✗ Not in voting phase\n";
@@ -148,7 +148,7 @@ foreach ($events as $event) {
     $eventTypes[$event['event']] = ($eventTypes[$event['event']] ?? 0) + 1;
 }
 
-echo "   Total events broadcast: " . count($events) . "\n";
+echo '   Total events broadcast: '.count($events)."\n";
 echo "   Event types:\n";
 foreach ($eventTypes as $type => $count) {
     echo "   - {$type}: {$count} events\n";

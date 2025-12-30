@@ -6,9 +6,7 @@ $app = require_once __DIR__.'/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 use App\Models\Room;
-use App\Models\Player;
 use App\Services\GameService;
-use App\Services\AiWordGenerator;
 
 echo "=== Testing المخادع Game Flow ===\n\n";
 
@@ -25,7 +23,7 @@ $player1 = $gameService->joinRoom($room, 'أحمد');
 $player2 = $gameService->joinRoom($room, 'محمد');
 $player3 = $gameService->joinRoom($room, 'سارة');
 echo "   Players joined: {$player1->name}, {$player2->name}, {$player3->name}\n";
-echo "   Total players: " . $room->players()->count() . "\n\n";
+echo '   Total players: '.$room->players()->count()."\n\n";
 
 // Test 3: Start game
 echo "3. Starting game...\n";
@@ -50,13 +48,13 @@ $gameService->submitHint($player1, 'حيوان أليف');
 $gameService->submitHint($player2, 'يأكل العشب');
 $gameService->submitHint($player3, 'له ذيل');
 echo "   Hints submitted\n";
-echo "   All hints submitted: " . ($room->allPlayersSubmittedHints() ? 'Yes' : 'No') . "\n\n";
+echo '   All hints submitted: '.($room->allPlayersSubmittedHints() ? 'Yes' : 'No')."\n\n";
 
 // Test 6: Check voting phase
 $room->refresh();
 echo "6. Game phase after hints:\n";
 echo "   Status: {$room->status}\n";
-echo "   Should be 'voting': " . ($room->status === 'voting' ? '✓' : '✗') . "\n\n";
+echo "   Should be 'voting': ".($room->status === 'voting' ? '✓' : '✗')."\n\n";
 
 // Test 7: Submit votes
 echo "7. Submitting votes...\n";
@@ -66,13 +64,13 @@ $gameService->submitVote($players[0], $players[1]);
 $gameService->submitVote($players[1], $players[2]);
 $gameService->submitVote($players[2], $players[0]);
 echo "   Votes submitted\n";
-echo "   All votes submitted: " . ($room->allPlayersVoted() ? 'Yes' : 'No') . "\n\n";
+echo '   All votes submitted: '.($room->allPlayersVoted() ? 'Yes' : 'No')."\n\n";
 
 // Test 8: Check results phase
 $room->refresh();
 echo "8. Game phase after voting:\n";
 echo "   Status: {$room->status}\n";
-echo "   Should be 'results': " . ($room->status === 'results' ? '✓' : '✗') . "\n\n";
+echo "   Should be 'results': ".($room->status === 'results' ? '✓' : '✗')."\n\n";
 
 // Test 9: Check scores
 echo "9. Final scores:\n";

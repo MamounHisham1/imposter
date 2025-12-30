@@ -1,52 +1,112 @@
 <div
     dir="rtl"
-    @if($room->status === 'discussion' && $timeRemaining !== null && $timeRemaining > 0)
-        wire:poll.1s
-    @endif
     x-data="{
+    // State
+    serverTimeRemaining: {{ $timeRemaining ?? 0 }},
+    clientTimeRemaining: {{ $timeRemaining ?? 0 }},
+    timerInterval: null,
+    lastSync: Date.now(),
+
     init() {
         const roomCode = '{{ $room->code }}';
-        console.log('Subscribing to room channel:', `room.${roomCode}`);
+        console.log('🔌 Subscribing to room channel:', `room.${roomCode}`);
 
-        // Subscribe to room channel
+        // Subscribe to room channel - SINGLE connection for all events
         const channel = window.Echo.channel(`room.${roomCode}`);
 
+        // Listen to all game events
         channel
             .listen('.player.joined', (e) => {
-                console.log('Received player.joined event:', e);
-                Livewire.dispatch('player-joined', e);
+                console.log('👤 Player joined:', e);
+                this.$wire.$refresh(); // Refresh component state
             })
             .listen('.phase.changed', (e) => {
-                console.log('Received phase.changed event:', e);
-                Livewire.dispatch('phase-changed', e);
+                console.log('🔄 Phase changed:', e);
+                this.$wire.$refresh(); // Refresh component state
+                this.resetTimer(); // Reset timer when phase changes
             })
             .listen('.hint.submitted', (e) => {
-                console.log('Received hint.submitted event:', e);
-                Livewire.dispatch('hint-submitted-event', e);
+                console.log('💡 Hint submitted:', e);
+                this.$wire.$refresh();
             })
             .listen('.vote.cast', (e) => {
-                console.log('Received vote.cast event:', e);
-                Livewire.dispatch('vote-cast-event', e);
+                console.log('🗳️ Vote cast:', e);
+                this.$wire.$refresh();
             })
             .listen('.round.finished', (e) => {
-                console.log('Received round.finished event:', e);
-                Livewire.dispatch('round-finished', e);
+                console.log('🏁 Round finished:', e);
+                this.$wire.$refresh();
+                this.stopTimer();
             })
             .listen('.message.sent', (e) => {
-                console.log('Received message.sent event:', e);
+                console.log('💬 Message sent:', e);
                 Livewire.dispatch('message-sent', e);
+            })
+            .listen('.state.updated', (e) => {
+                console.log('🔃 State updated:', e);
+                this.$wire.$refresh();
             });
 
-        console.log('Subscribed to channel:', channel);
+        console.log('✅ WebSocket channel subscribed');
+
+        // Start client-side timer for smooth countdown
+        this.initTimer();
 
         // Cleanup on component unmount
         this.$wire.on('destroy', () => {
-            console.log('Leaving channel:', `room.${roomCode}`);
+            console.log('👋 Leaving channel:', `room.${roomCode}`);
+            this.stopTimer();
             window.Echo.leave(`room.${roomCode}`);
         });
+    },
+
+    initTimer() {
+        // Only run timer during discussion phase
+        if ('{{ $room->status }}' === 'discussion' && this.clientTimeRemaining > 0) {
+            this.startTimer();
+        }
+    },
+
+    startTimer() {
+        this.stopTimer(); // Clear any existing timer
+        this.lastSync = Date.now();
+
+        this.timerInterval = setInterval(() => {
+            if (this.clientTimeRemaining > 0) {
+                this.clientTimeRemaining--;
+            } else {
+                this.stopTimer();
+            }
+        }, 1000);
+    },
+
+    stopTimer() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+    },
+
+    resetTimer() {
+        this.stopTimer();
+        this.serverTimeRemaining = {{ $timeRemaining ?? 0 }};
+        this.clientTimeRemaining = {{ $timeRemaining ?? 0 }};
+        this.initTimer();
     }
 }"
 x-init="init"
+x-effect="
+    // Sync client timer with server when server time changes
+    if ({{ $timeRemaining ?? 0 }} !== serverTimeRemaining) {
+        serverTimeRemaining = {{ $timeRemaining ?? 0 }};
+        clientTimeRemaining = {{ $timeRemaining ?? 0 }};
+        if ('{{ $room->status }}' === 'discussion' && clientTimeRemaining > 0) {
+            startTimer();
+        } else {
+            stopTimer();
+        }
+    }
+"
 x-show="true"
 x-transition:enter="transition ease-out duration-300"
 x-transition:enter-start="opacity-0"
@@ -302,19 +362,28 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                     <!-- Word Reveal Phase -->
                     <div
                         class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-12 shadow-2xl border border-blue-700/30"
-                        wire:poll.1s
                         x-data="{
-                            serverTimeRemaining: {{ $timeRemaining ?? 10 }},
+                            revealTimer: {{ $timeRemaining ?? 10 }},
                             hasTransitioned: false,
-                            checkTransition() {
-                                if (this.serverTimeRemaining <= 0 && !this.hasTransitioned) {
-                                    this.hasTransitioned = true;
-                                    $wire.call('transitionToDiscussion');
-                                }
+                            countdown: null,
+
+                            init() {
+                                this.startCountdown();
+                            },
+
+                            startCountdown() {
+                                this.countdown = setInterval(() => {
+                                    if (this.revealTimer > 0) {
+                                        this.revealTimer--;
+                                    } else if (!this.hasTransitioned) {
+                                        this.hasTransitioned = true;
+                                        clearInterval(this.countdown);
+                                        $wire.call('transitionToDiscussion');
+                                    }
+                                }, 1000);
                             }
                         }"
-                        x-init="checkTransition()"
-                        x-effect="serverTimeRemaining = {{ $timeRemaining ?? 10 }}; checkTransition()"
+                        x-init="init()"
                     >
                         <div class="text-center">
                             <h3 class="text-3xl font-bold text-blue-100 mb-8">الكلمة</h3>
@@ -333,7 +402,7 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                             <div class="flex flex-col items-center gap-4 mb-6">
                                 <p class="text-xl text-blue-200">النقاش يبدأ خلال</p>
                                 <div class="flex items-center justify-center w-20 h-20 bg-blue-800/50 rounded-full border-4 border-blue-600/50">
-                                    <span class="text-4xl font-bold text-white">{{ max(0, $timeRemaining ?? 10) }}</span>
+                                    <span class="text-4xl font-bold text-white" x-text="Math.max(0, revealTimer)">{{ max(0, $timeRemaining ?? 10) }}</span>
                                 </div>
                             </div>
 
@@ -348,19 +417,6 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                     <!-- Discussion Chat -->
                     <div
                         class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-blue-700/30"
-                        wire:poll.1s
-                        x-data="{
-                            serverTimeRemaining: {{ $timeRemaining ?? 0 }},
-                            hasTransitioned: false,
-                            checkTransition() {
-                                if (this.serverTimeRemaining <= 0 && !this.hasTransitioned) {
-                                    this.hasTransitioned = true;
-                                    $wire.call('transitionToVoting');
-                                }
-                            }
-                        }"
-                        x-init="checkTransition()"
-                        x-effect="serverTimeRemaining = {{ $timeRemaining ?? 0 }}; checkTransition()"
                     >
                         <div class="flex items-center justify-between mb-6">
                             <h3 class="text-2xl font-bold text-blue-100">💬 النقاش</h3>
@@ -369,14 +425,12 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                                     <!-- Discussion Time Controls (Creator Only) -->
                                     <div x-data="{ editing: false, time: {{ $room->discussion_time }} }">
                                         <div x-show="!editing" class="flex items-center gap-2">
-                                            @if($timeRemaining !== null && $timeRemaining > 0)
-                                                <div class="flex items-center gap-2 px-4 py-2 bg-blue-800/50 rounded-xl border border-blue-600/30">
-                                                    <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                    </svg>
-                                                    <span class="text-white font-bold">{{ $timeRemaining }}s</span>
-                                                </div>
-                                            @endif
+                                            <div x-show="$root.clientTimeRemaining > 0" class="flex items-center gap-2 px-4 py-2 bg-blue-800/50 rounded-xl border border-blue-600/30">
+                                                <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                                <span class="text-white font-bold" x-text="$root.clientTimeRemaining + 's'">{{ $timeRemaining }}s</span>
+                                            </div>
                                             <button
                                                 @click="editing = true"
                                                 class="px-3 py-2 bg-blue-700/50 hover:bg-blue-600/50 rounded-lg transition-colors"
@@ -416,14 +470,12 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                                         </div>
                                     </div>
                                 @else
-                                    @if($timeRemaining !== null && $timeRemaining > 0)
-                                        <div class="flex items-center gap-2 px-4 py-2 bg-blue-800/50 rounded-xl border border-blue-600/30">
-                                            <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                            </svg>
-                                            <span class="text-white font-bold">{{ $timeRemaining }}s</span>
-                                        </div>
-                                    @endif
+                                    <div x-show="$root.clientTimeRemaining > 0" class="flex items-center gap-2 px-4 py-2 bg-blue-800/50 rounded-xl border border-blue-600/30">
+                                        <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        <span class="text-white font-bold" x-text="$root.clientTimeRemaining + 's'">{{ $timeRemaining }}s</span>
+                                    </div>
                                 @endif
                             </div>
                         </div>
@@ -440,7 +492,6 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                             <!-- Chat Messages -->
                             <div
                                 id="chat-messages"
-                                wire:poll.1s
                                 class="mb-6 h-[28rem] overflow-y-auto bg-gradient-to-b from-blue-900/40 to-blue-950/60 rounded-2xl p-6 space-y-4 border border-blue-700/30 shadow-inner scrollbar-thin scrollbar-thumb-blue-700 scrollbar-track-blue-900/20"
                                 x-data="{
                                     messageCount: {{ count($messages) }},
@@ -452,21 +503,14 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                                         });
                                     }
                                 }"
-                                x-init="
-                                    scrollToBottom(false);
-                                    $watch('messageCount', (value) => {
-                                        if (value !== {{ count($messages) }}) {
-                                            messageCount = {{ count($messages) }};
-                                            setTimeout(() => scrollToBottom(true), 100);
-                                        }
-                                    });
-                                "
+                                x-init="scrollToBottom(false);"
                                 x-effect="
                                     if ({{ count($messages) }} !== messageCount) {
                                         messageCount = {{ count($messages) }};
-                                        scrollToBottom(true);
+                                        $nextTick(() => scrollToBottom(true));
                                     }
                                 "
+                                @message-sent.window="$nextTick(() => scrollToBottom(true))"
                             >
                                 @forelse($messages as $index => $message)
                                     <div
@@ -514,7 +558,7 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                                             class="w-full px-5 py-4 bg-blue-800/40 border-2 border-blue-600/40 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-white placeholder-blue-400 transition-all duration-300 resize-none"
                                             placeholder="اكتب رسالتك هنا..."
                                             required
-                                            @if($timeRemaining !== null && $timeRemaining <= 0) disabled @endif
+                                            :disabled="$root.clientTimeRemaining <= 0"
                                             x-data="{
                                                 resize() {
                                                     $el.style.height = 'auto';
@@ -533,7 +577,7 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                                     <button
                                         type="submit"
                                         class="relative overflow-hidden group bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-4 px-6 rounded-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                                        @if($timeRemaining !== null && $timeRemaining <= 0) disabled @endif
+                                        :disabled="$root.clientTimeRemaining <= 0"
                                     >
                                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
@@ -646,7 +690,6 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                     <!-- Results -->
                     <div
                         class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-blue-700/30"
-                        wire:poll.1s
                         x-data="{
                             countdown: 5,
                             interval: null,
@@ -677,18 +720,6 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                             }
                         }"
                         x-init="init()"
-                        x-effect="
-                            // Watch for gameStatus changes
-                            if ('{{ $gameStatus ?? '' }}' !== gameStatus) {
-                                gameStatus = '{{ $gameStatus ?? '' }}';
-                                console.log('gameStatus changed to:', gameStatus);
-                                // Clear interval if game became finished
-                                if (gameStatus === 'finished' && interval) {
-                                    clearInterval(interval);
-                                    interval = null;
-                                }
-                            }
-                        "
                     >
                         <div class="flex items-center justify-between mb-8">
                             <h3 class="text-2xl font-bold text-blue-100">

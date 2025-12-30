@@ -6,7 +6,6 @@ $app = require_once __DIR__.'/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 use App\Models\Room;
-use App\Models\Player;
 use App\Services\GameService;
 
 echo "=== Testing Creator Logic ===\n\n";
@@ -21,7 +20,7 @@ $room->refresh();
 
 echo "   Room created: {$room->code}\n";
 echo "   Creator ID: {$room->creator_id}\n";
-echo "   Creator name: " . ($room->creator ? $room->creator->name : 'غير معين') . "\n";
+echo '   Creator name: '.($room->creator ? $room->creator->name : 'غير معين')."\n";
 
 if ($room->creator_id === $player1->id) {
     echo "   ✓ Creator correctly set to first player\n";
@@ -40,7 +39,7 @@ foreach ($room->players as $player) {
     $isCreator = $room->creator_id === $player->id ? ' (منشئ الغرفة)' : '';
     echo "   - {$player->name}{$isCreator}\n";
 }
-echo "   Total players: " . $room->players()->count() . "\n";
+echo '   Total players: '.$room->players()->count()."\n";
 echo "   ✓ Players joined successfully\n\n";
 
 // Test 3: Test that only creator can start game
