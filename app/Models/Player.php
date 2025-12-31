@@ -37,6 +37,11 @@ class Player extends Model
         return $this->belongsTo(Room::class);
     }
 
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function hint(): HasOne
     {
         return $this->hasOne(Hint::class);

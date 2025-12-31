@@ -1,12 +1,15 @@
 <?php
 
 use App\Livewire\CreateRoom;
+use App\Livewire\FriendRequests;
+use App\Livewire\Friends;
 use App\Livewire\GameRoom;
 use App\Livewire\JoinRoom;
 use App\Livewire\Settings\Appearance;
 use App\Livewire\Settings\Password;
 use App\Livewire\Settings\Profile;
 use App\Livewire\Settings\TwoFactor;
+use App\Livewire\UserProfile;
 use Illuminate\Support\Facades\Route;
 
 // Game Routes
@@ -25,4 +28,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/settings/password', Password::class)->name('user-password.edit');
     Route::get('/settings/appearance', Appearance::class)->name('appearance.edit');
     Route::get('/settings/two-factor', TwoFactor::class)->name('two-factor.show');
+});
+
+// Profile and Friends Routes
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/profile', UserProfile::class)->name('my-profile');
+    Route::get('/profile/{user}', UserProfile::class)->name('user.profile');
+    Route::get('/friends', Friends::class)->name('friends');
+    Route::get('/friend-requests', FriendRequests::class)->name('friend-requests');
 });
