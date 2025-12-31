@@ -1,13 +1,48 @@
+@php
+    $uniqueId = 'game-room-' . uniqid();
+@endphp
 <div
     dir="rtl"
     x-data="{
-    // State
-    serverTimeRemaining: {{ $timeRemaining ?? 0 }},
-    clientTimeRemaining: {{ $timeRemaining ?? 0 }},
-    timerInterval: null,
-    lastSync: Date.now(),
-    roomStatus: '{{ $room->status }}',
+    // State - stored directly for $root access, backed by global storage
     roomCode: '{{ $room->code }}',
+    uniqueId: '{{ $uniqueId }}',
+
+    // Regular properties (backed by global storage)
+    get serverTimeRemaining() {
+        return this.getTimerState().serverTimeRemaining;
+    },
+    set serverTimeRemaining(value) {
+        this.getTimerState().serverTimeRemaining = value;
+    },
+    get clientTimeRemaining() {
+        return this.getTimerState().clientTimeRemaining;
+    },
+    set clientTimeRemaining(value) {
+        this.getTimerState().clientTimeRemaining = value;
+    },
+    get roomStatus() {
+        return this.getTimerState().roomStatus;
+    },
+    set roomStatus(value) {
+        this.getTimerState().roomStatus = value;
+    },
+
+    // Initialize or get global timer state (survives Livewire refreshes)
+    getTimerState() {
+        if (!window.__imposterTimers) {
+            window.__imposterTimers = {};
+        }
+        if (!window.__imposterTimers[this.uniqueId]) {
+            window.__imposterTimers[this.uniqueId] = {
+                serverTimeRemaining: {{ $timeRemaining ?? 0 }},
+                clientTimeRemaining: {{ $timeRemaining ?? 0 }},
+                roomStatus: '{{ $room->status }}',
+                lastSync: Date.now()
+            };
+        }
+        return window.__imposterTimers[this.uniqueId];
+    },
 
     init() {
         console.log('🔌 Subscribing to room channel:', `room.${this.roomCode}`);
@@ -24,6 +59,11 @@
 
         // Start client-side timer for smooth countdown
         this.initTimer();
+
+        // Cleanup on component destroy
+        this.$wire.on('destroy', () => {
+            this.cleanup();
+        });
     },
 
     subscribeToChannel() {
@@ -38,25 +78,23 @@
         channel
             .listen('.player.joined', (e) => {
                 console.log('👤 Player joined:', e);
-                this.$wire.$refresh();
+                this.syncWithServer();
             })
             .listen('.phase.changed', (e) => {
                 console.log('🔄 Phase changed:', e);
-                this.$wire.$refresh();
-                this.resetTimer();
+                this.syncWithServer();
             })
             .listen('.hint.submitted', (e) => {
                 console.log('💡 Hint submitted:', e);
-                this.$wire.$refresh();
+                this.syncWithServer();
             })
             .listen('.vote.cast', (e) => {
                 console.log('🗳️ Vote cast:', e);
-                this.$wire.$refresh();
+                this.syncWithServer();
             })
             .listen('.round.finished', (e) => {
                 console.log('🏁 Round finished:', e);
-                this.$wire.$refresh();
-                this.stopTimer();
+                this.syncWithServer();
             })
             .listen('.message.sent', (e) => {
                 console.log('💬 Message sent:', e);
@@ -64,17 +102,10 @@
             })
             .listen('.state.updated', (e) => {
                 console.log('🔃 State updated:', e);
-                this.$wire.$refresh();
+                this.syncWithServer();
             });
 
         console.log('✅ WebSocket channel subscribed');
-
-        // Cleanup on component unmount
-        this.$wire.on('destroy', () => {
-            console.log('👋 Leaving channel:', `room.${this.roomCode}`);
-            this.stopTimer();
-            window.Echo.leave(`room.${this.roomCode}`);
-        });
     },
 
     initTimer() {
@@ -84,12 +115,20 @@
     },
 
     startTimer() {
-        this.stopTimer();
-        this.lastSync = Date.now();
+        // Clear any existing interval for this room
+        if (window.__imposterTimerIntervals && window.__imposterTimerIntervals[this.uniqueId]) {
+            clearInterval(window.__imposterTimerIntervals[this.uniqueId]);
+        }
+        if (!window.__imposterTimerIntervals) {
+            window.__imposterTimerIntervals = {};
+        }
 
-        this.timerInterval = setInterval(() => {
-            if (this.clientTimeRemaining > 0) {
-                this.clientTimeRemaining--;
+        const state = this.getTimerState();
+        state.lastSync = Date.now();
+
+        window.__imposterTimerIntervals[this.uniqueId] = setInterval(() => {
+            if (state.clientTimeRemaining > 0) {
+                state.clientTimeRemaining--;
             } else {
                 this.stopTimer();
             }
@@ -97,23 +136,23 @@
     },
 
     stopTimer() {
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-            this.timerInterval = null;
+        if (window.__imposterTimerIntervals && window.__imposterTimerIntervals[this.uniqueId]) {
+            clearInterval(window.__imposterTimerIntervals[this.uniqueId]);
+            delete window.__imposterTimerIntervals[this.uniqueId];
         }
     },
 
-    resetTimer() {
-        this.stopTimer();
+    syncWithServer() {
+        // Fetch updated data from server
         this.$wire.$refresh();
-        this.$nextTick(() => {
-            // After Livewire refresh, sync values from server
-            const newTime = {{ $timeRemaining ?? 0 }};
-            this.serverTimeRemaining = newTime;
-            this.clientTimeRemaining = newTime;
-            this.roomStatus = '{{ $room->status }}';
-            this.initTimer();
-        });
+    },
+
+    cleanup() {
+        this.stopTimer();
+        if (typeof window.Echo !== 'undefined') {
+            console.log('👋 Leaving channel:', `room.${this.roomCode}`);
+            window.Echo.leave(`room.${this.roomCode}`);
+        }
     }
 }"
 x-init="init"
