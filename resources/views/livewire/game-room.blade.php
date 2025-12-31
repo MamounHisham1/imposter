@@ -6,24 +6,44 @@
     clientTimeRemaining: {{ $timeRemaining ?? 0 }},
     timerInterval: null,
     lastSync: Date.now(),
+    roomStatus: '{{ $room->status }}',
+    roomCode: '{{ $room->code }}',
 
     init() {
-        const roomCode = '{{ $room->code }}';
-        console.log('🔌 Subscribing to room channel:', `room.${roomCode}`);
+        console.log('🔌 Subscribing to room channel:', `room.${this.roomCode}`);
 
-        // Subscribe to room channel - SINGLE connection for all events
-        const channel = window.Echo.channel(`room.${roomCode}`);
+        // Wait for Echo to be available, then subscribe
+        this.$nextTick(() => {
+            if (typeof window.Echo !== 'undefined') {
+                this.subscribeToChannel();
+            } else {
+                // Echo might not be ready yet, try again shortly
+                setTimeout(() => this.subscribeToChannel(), 100);
+            }
+        });
+
+        // Start client-side timer for smooth countdown
+        this.initTimer();
+    },
+
+    subscribeToChannel() {
+        if (typeof window.Echo === 'undefined') {
+            console.error('Echo still not available');
+            return;
+        }
+
+        const channel = window.Echo.channel(`room.${this.roomCode}`);
 
         // Listen to all game events
         channel
             .listen('.player.joined', (e) => {
                 console.log('👤 Player joined:', e);
-                this.$wire.$refresh(); // Refresh component state
+                this.$wire.$refresh();
             })
             .listen('.phase.changed', (e) => {
                 console.log('🔄 Phase changed:', e);
-                this.$wire.$refresh(); // Refresh component state
-                this.resetTimer(); // Reset timer when phase changes
+                this.$wire.$refresh();
+                this.resetTimer();
             })
             .listen('.hint.submitted', (e) => {
                 console.log('💡 Hint submitted:', e);
@@ -49,26 +69,22 @@
 
         console.log('✅ WebSocket channel subscribed');
 
-        // Start client-side timer for smooth countdown
-        this.initTimer();
-
         // Cleanup on component unmount
         this.$wire.on('destroy', () => {
-            console.log('👋 Leaving channel:', `room.${roomCode}`);
+            console.log('👋 Leaving channel:', `room.${this.roomCode}`);
             this.stopTimer();
-            window.Echo.leave(`room.${roomCode}`);
+            window.Echo.leave(`room.${this.roomCode}`);
         });
     },
 
     initTimer() {
-        // Only run timer during discussion phase
-        if ('{{ $room->status }}' === 'discussion' && this.clientTimeRemaining > 0) {
+        if (this.roomStatus === 'discussion' && this.clientTimeRemaining > 0) {
             this.startTimer();
         }
     },
 
     startTimer() {
-        this.stopTimer(); // Clear any existing timer
+        this.stopTimer();
         this.lastSync = Date.now();
 
         this.timerInterval = setInterval(() => {
@@ -89,24 +105,18 @@
 
     resetTimer() {
         this.stopTimer();
-        this.serverTimeRemaining = {{ $timeRemaining ?? 0 }};
-        this.clientTimeRemaining = {{ $timeRemaining ?? 0 }};
-        this.initTimer();
+        this.$wire.$refresh();
+        this.$nextTick(() => {
+            // After Livewire refresh, sync values from server
+            const newTime = {{ $timeRemaining ?? 0 }};
+            this.serverTimeRemaining = newTime;
+            this.clientTimeRemaining = newTime;
+            this.roomStatus = '{{ $room->status }}';
+            this.initTimer();
+        });
     }
 }"
 x-init="init"
-x-effect="
-    // Sync client timer with server when server time changes
-    if ({{ $timeRemaining ?? 0 }} !== serverTimeRemaining) {
-        serverTimeRemaining = {{ $timeRemaining ?? 0 }};
-        clientTimeRemaining = {{ $timeRemaining ?? 0 }};
-        if ('{{ $room->status }}' === 'discussion' && clientTimeRemaining > 0) {
-            startTimer();
-        } else {
-            stopTimer();
-        }
-    }
-"
 x-show="true"
 x-transition:enter="transition ease-out duration-300"
 x-transition:enter-start="opacity-0"
