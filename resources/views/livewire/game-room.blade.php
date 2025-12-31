@@ -27,6 +27,15 @@
     set roomStatus(value) {
         this.getTimerState().roomStatus = value;
     },
+    get isCreator() {
+        return {{ $player && $room->creator_id === $player->id ? 'true' : 'false' }};
+    },
+    get hasTransitioned() {
+        return this.getTimerState().hasTransitioned ?? false;
+    },
+    set hasTransitioned(value) {
+        this.getTimerState().hasTransitioned = value;
+    },
 
     // Initialize or get global timer state (survives Livewire refreshes)
     getTimerState() {
@@ -38,7 +47,8 @@
                 serverTimeRemaining: {{ $timeRemaining ?? 0 }},
                 clientTimeRemaining: {{ $timeRemaining ?? 0 }},
                 roomStatus: '{{ $room->status }}',
-                lastSync: Date.now()
+                lastSync: Date.now(),
+                hasTransitioned: false
             };
         }
         return window.__imposterTimers[this.uniqueId];
@@ -59,6 +69,13 @@
 
         // Start client-side timer for smooth countdown
         this.initTimer();
+
+        // Periodic timer sync to prevent drift
+        setInterval(() => {
+            if (this.roomStatus === 'discussion' && this.clientTimeRemaining > 0) {
+                this.$wire.$refresh();
+            }
+        }, 5000);
 
         // Cleanup on component destroy
         this.$wire.on('destroy', () => {
@@ -82,6 +99,14 @@
             })
             .listen('.phase.changed', (e) => {
                 console.log('🔄 Phase changed:', e);
+                const oldStatus = this.roomStatus;
+                if (e.phase) {
+                    this.roomStatus = e.phase;
+                    this.hasTransitioned = false;
+                    if (oldStatus !== 'discussion' && e.phase === 'discussion') {
+                        this.startTimer();
+                    }
+                }
                 this.syncWithServer();
             })
             .listen('.hint.submitted', (e) => {
@@ -131,6 +156,12 @@
                 state.clientTimeRemaining--;
             } else {
                 this.stopTimer();
+                // Auto-transition to voting when discussion time is up
+                // Only the creator triggers this to avoid race conditions
+                if (this.roomStatus === 'discussion' && this.isCreator && !this.hasTransitioned) {
+                    this.hasTransitioned = true;
+                    $wire.call('transitionToVoting');
+                }
             }
         }, 1000);
     },
@@ -143,7 +174,6 @@
     },
 
     syncWithServer() {
-        // Fetch updated data from server
         this.$wire.$refresh();
     },
 
