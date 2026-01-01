@@ -7,6 +7,7 @@
     // State - stored directly for $root access, backed by global storage
     roomCode: '{{ $room->code }}',
     uniqueId: '{{ $uniqueId }}',
+    renderedTimeRemaining: {{ $timeRemaining ?? 0 }},
 
     // Regular properties (backed by global storage)
     get serverTimeRemaining() {
@@ -52,6 +53,15 @@
             };
         }
         return window.__imposterTimers[this.uniqueId];
+    },
+
+    syncClientTime() {
+        // Sync client time with server rendered time if difference is significant (>2s)
+        // This prevents jumpy updates while correcting drift
+        const diff = this.serverTimeRemaining - this.clientTimeRemaining;
+        if (Math.abs(diff) > 2) {
+            this.clientTimeRemaining = this.serverTimeRemaining;
+        }
     },
 
     init() {
@@ -186,6 +196,7 @@
     }
 }"
 x-init="init"
+x-effect="$nextTick(() => { serverTimeRemaining = renderedTimeRemaining; syncClientTime(); })"
 x-show="true"
 x-transition:enter="transition ease-out duration-300"
 x-transition:enter-start="opacity-0"
