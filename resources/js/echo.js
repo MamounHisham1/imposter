@@ -3,14 +3,22 @@ import Pusher from 'pusher-js';
 
 window.Pusher = Pusher;
 
+// Get Reverb config from window object (set by server) or Vite env (fallback)
+const reverbConfig = window.__reverbConfig || {
+    key: import.meta.env.VITE_REVERB_APP_KEY,
+    host: import.meta.env.VITE_REVERB_HOST,
+    port: import.meta.env.VITE_REVERB_PORT ?? 443,
+    scheme: import.meta.env.VITE_REVERB_SCHEME ?? 'https',
+};
+
 // WebSocket Best Practices Configuration
 window.Echo = new Echo({
     broadcaster: 'reverb',
-    key: import.meta.env.VITE_REVERB_APP_KEY,
-    wsHost: import.meta.env.VITE_REVERB_HOST,
-    wsPort: import.meta.env.VITE_REVERB_PORT ?? 80,
-    wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
-    forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
+    key: reverbConfig.key,
+    wsHost: reverbConfig.host,
+    wsPort: reverbConfig.port,
+    wssPort: reverbConfig.port,
+    forceTLS: reverbConfig.scheme === 'https',
     enabledTransports: ['ws', 'wss'],
 
     // Connection configuration for better reliability
