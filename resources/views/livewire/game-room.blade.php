@@ -81,7 +81,16 @@
         this.initTimer();
 
         // Periodic timer sync to prevent drift
-        setInterval(() => {
+        // Use global storage to prevent multiple intervals
+        const syncIntervalKey = this.uniqueId + '_sync';
+        if (window.__imposterTimerIntervals && window.__imposterTimerIntervals[syncIntervalKey]) {
+            clearInterval(window.__imposterTimerIntervals[syncIntervalKey]);
+        }
+        if (!window.__imposterTimerIntervals) {
+            window.__imposterTimerIntervals = {};
+        }
+
+        window.__imposterTimerIntervals[syncIntervalKey] = setInterval(() => {
             if (this.roomStatus === 'discussion' && this.clientTimeRemaining > 0) {
                 this.$wire.$refresh();
             }
@@ -189,6 +198,12 @@
 
     cleanup() {
         this.stopTimer();
+        // Clear sync interval
+        const syncIntervalKey = this.uniqueId + '_sync';
+        if (window.__imposterTimerIntervals && window.__imposterTimerIntervals[syncIntervalKey]) {
+            clearInterval(window.__imposterTimerIntervals[syncIntervalKey]);
+            delete window.__imposterTimerIntervals[syncIntervalKey];
+        }
         if (typeof window.Echo !== 'undefined') {
             console.log('👋 Leaving channel:', `room.${this.roomCode}`);
             window.Echo.leave(`room.${this.roomCode}`);
@@ -453,21 +468,54 @@ class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 phase-transition
                     <div
                         class="bg-gradient-to-br from-blue-900/80 to-blue-800/80 backdrop-blur-lg rounded-3xl p-12 shadow-2xl border border-blue-700/30"
                         x-data="{
-                            revealTimer: {{ $timeRemaining ?? 10 }},
-                            hasTransitioned: false,
-                            countdown: null,
+                            roomCode: '{{ $room->code }}',
+                            get revealTimer() {
+                                return this.getRevealState().timer;
+                            },
+                            set revealTimer(value) {
+                                this.getRevealState().timer = value;
+                            },
+                            get hasTransitioned() {
+                                return this.getRevealState().hasTransitioned;
+                            },
+                            set hasTransitioned(value) {
+                                this.getRevealState().hasTransitioned = value;
+                            },
+
+                            getRevealState() {
+                                if (!window.__imposterRevealTimers) {
+                                    window.__imposterRevealTimers = {};
+                                }
+                                if (!window.__imposterRevealTimers[this.roomCode]) {
+                                    window.__imposterRevealTimers[this.roomCode] = {
+                                        timer: {{ $timeRemaining ?? 10 }},
+                                        hasTransitioned: false
+                                    };
+                                }
+                                return window.__imposterRevealTimers[this.roomCode];
+                            },
 
                             init() {
                                 this.startCountdown();
                             },
 
                             startCountdown() {
-                                this.countdown = setInterval(() => {
+                                // Clear any existing interval to prevent duplicates
+                                const intervalKey = this.roomCode + '_reveal';
+                                if (!window.__imposterTimerIntervals) {
+                                    window.__imposterTimerIntervals = {};
+                                }
+                                if (window.__imposterTimerIntervals[intervalKey]) {
+                                    clearInterval(window.__imposterTimerIntervals[intervalKey]);
+                                }
+
+                                window.__imposterTimerIntervals[intervalKey] = setInterval(() => {
                                     if (this.revealTimer > 0) {
                                         this.revealTimer--;
                                     } else if (!this.hasTransitioned) {
                                         this.hasTransitioned = true;
-                                        clearInterval(this.countdown);
+                                        clearInterval(window.__imposterTimerIntervals[intervalKey]);
+                                        delete window.__imposterTimerIntervals[intervalKey];
                                         $wire.call('transitionToDiscussion');
                                     }
                                 }, 1000);
